@@ -16,7 +16,7 @@ JOINT_CONFIG = {
     "腰部": {
         "rom": {"屈曲": 45, "伸展": 30, "右側屈": 20, "左側屈": 20, "右回旋": 45, "左回旋": 45},
         "mmt": ["体幹屈筋群", "体幹伸筋群", "腹斜筋群", "腸腰筋", "大殿筋"],
-        "sensory": ["L1", "L2", "L3", "L4", "L5", "S1"],
+        "sensory": ["L1", "L2", "L3", "L4", "L5", "S1", "S2"],
         "special": ["SLRテスト", "FNSテスト", "Kempテスト", "Newtonテスト", "Thomasテスト", "Valsalvaテスト", "叩打痛"],
         "check": ["寝返り困難", "起き上がり困難", "立ち上がり困難", "長時間の座位困難", "間欠性跛行", "体幹の側方偏移"]
     },
@@ -151,16 +151,21 @@ st.divider()
 if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
     st.subheader("🪡 感覚検査（表在感覚異常など）")
     
-    # 頸部が選ばれた時だけデルマトーム図を表示（widthでサイズを小さく固定）
+    # 頸部が選ばれた時はdermatome1.jpgを表示
     if joint == "頸部":
-        with st.expander("📖 デルマトーム（知覚領域）の参考図を開く"):
+        with st.expander("📖 頸部のデルマトーム（知覚領域）を開く"):
             try:
-                st.image("dermatome.jpg", width=400)
+                st.image("dermatome1.jpg", width=400)
             except Exception:
-                try:
-                    st.image("dermatome.png", width=400)
-                except Exception:
-                    st.info("💡 GitHubに「dermatome.jpg」または「dermatome.png」という名前で画像をアップロードすると、ここに図が表示されます！")
+                st.info("💡 GitHubに「dermatome1.jpg」という名前で画像をアップロードすると、ここに図が表示されます！")
+                
+    # 腰部が選ばれた時はdermatome2.jpgを表示
+    elif joint == "腰部":
+        with st.expander("📖 腰部のデルマトーム（知覚領域）を開く"):
+            try:
+                st.image("dermatome2.jpg", width=400)
+            except Exception:
+                st.info("💡 GitHubに「dermatome2.jpg」という名前で画像をアップロードすると、ここに図が表示されます！")
 
     st.caption("感覚異常がある領域にチェックを入れてください。")
     for s in sides_to_eval:
