@@ -10,7 +10,11 @@ JOINT_CONFIG = {
         "rom": {"屈曲": 60, "伸展": 50, "右側屈": 50, "左側屈": 50, "右回旋": 60, "左回旋": 60, "CV角": 50},
         "mmt": ["頸部伸筋群", "僧帽筋上部", "肩甲挙筋", "前鋸筋", "上腕二頭筋", "上腕三頭筋", "上腕筋", "腕橈骨筋"],
         "special": ["Cervical Flexion-Rotation Test", "Spurlingテスト", "Jacksonテスト", "頸椎牽引テスト", "Hoffmann反射", "Trener反射", "足クローヌス", "Babisnki反射", "Adsonテスト", "Wrightテスト", "Edenテスト"],
-        "check": ["前方頭位(FHP)", "表在感覚異常(C1-C7)"]
+        "check": [
+            "前方頭位(FHP)", 
+            "C1 表在感覚異常", "C2 表在感覚異常", "C3 表在感覚異常", 
+            "C4 表在感覚異常", "C5 表在感覚異常", "C6 表在感覚異常", "C7 表在感覚異常"
+        ]
     },
     "腰部": {
         "rom": {"屈曲": 45, "伸展": 30, "右側屈": 20, "左側屈": 20, "右回旋": 45, "左回旋": 45},
@@ -72,7 +76,7 @@ with st.sidebar:
     st.divider()
     st.header("📋 基本設定")
     patient_id = st.text_input("患者IDまたは氏名", "A様")
-    diagnosis = st.text_input("病名を入力", "変形性肩関節症")
+    diagnosis = st.text_input("病名を入力", "頸椎症性神経根症")
     joint = st.selectbox("評価する部位を選択", list(JOINT_CONFIG.keys()))
     
     # 頸部・腰部の場合は正中（単一入力）、それ以外は強制的に両側入力にする
@@ -86,7 +90,7 @@ with st.sidebar:
 # --- メインエリア：評価入力 ---
 st.header(f"【{joint}】の評価入力")
 
-# 疼痛（NRS）入力 - スライダーからプルダウンへ変更
+# 疼痛（NRS）入力
 st.subheader("⚡ 疼痛 (NRS 0から10)")
 c_nrs1, c_nrs2, c_nrs3 = st.columns(3)
 nrs_options = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -103,7 +107,7 @@ check_results = {s: {} for s in sides_to_eval}
 
 # ROM入力
 st.subheader("📐 関節可動域 (ROM)")
-st.caption("入力した項目のみカルテに反映されます。薄い文字は参考可動域です。")
+st.caption("入力した項目のみカルテに反映されます。")
 for item, ref in JOINT_CONFIG[joint]["rom"].items():
     if side == "両側":
         c1, c2 = st.columns(2)
@@ -137,7 +141,7 @@ for item in JOINT_CONFIG[joint]["mmt"]:
 
 st.divider()
 
-# 膝関節アライメント入力（膝関節が選ばれた時のみ表示）
+# 膝関節アライメント入力
 nwb_kk = nwb_aa = wb_kk = wb_aa = None
 hallux_valgus_r = hallux_valgus_l = arch_drop_r = arch_drop_l = weight_bearing_r = weight_bearing_l = None
 if joint == "膝関節":
@@ -167,6 +171,19 @@ if joint == "膝関節":
 
 # スペシャルテスト/チェック
 st.subheader("🧪 陽性テスト・観察項目")
+
+# --- デルマトーム図の表示ギミック ---
+if joint == "頸部":
+    with st.expander("📖 デルマトーム（知覚領域）の参考図を開く"):
+        try:
+            # jpgとpngどちらでアップロードされても対応できるように処理
+            st.image("dermatome.jpg", use_container_width=True)
+        except Exception:
+            try:
+                st.image("dermatome.png", use_container_width=True)
+            except Exception:
+                st.info("💡 GitHubに「dermatome.jpg」または「dermatome.png」という名前で画像をアップロードすると、ここに図が表示されます！")
+
 st.caption("該当する項目にチェックを入れてください。")
 for s in sides_to_eval:
     prefix = f"【{s}】" if side == "両側" else ""
@@ -186,10 +203,8 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
     if not gemini_key:
         st.error("左のサイドバーにAPIキーを入力してください！")
     else:
-        # 疼痛
         pain_str = f"安静時{nrs_rest}, 夜間時{nrs_night}, 動作時{nrs_move}"
         
-        # MMTの抽出
         mmt_list = []
         for item in JOINT_CONFIG[joint]["mmt"]:
             if side == "両側":
@@ -204,7 +219,6 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
                     mmt_list.append(f"{item}({val})")
         mmt_str = "、\n".join(mmt_list) if mmt_list else "特記なし"
         
-        # ROMの抽出
         rom_list = []
         for item, ref in JOINT_CONFIG[joint]["rom"].items():
             if item == "内旋(結帯)":
@@ -231,7 +245,6 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
                         rom_list.append(f"{item}({val}°)")
         rom_str = "、\n".join(rom_list) if rom_list else "特記なし"
 
-        # 膝アライメント・足部評価の抽出
         knee_align_str = ""
         if joint == "膝関節":
             align_parts = []
@@ -254,7 +267,6 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
             if align_parts:
                 knee_align_str = "\n・アライメント・足部評価：\n  " + "\n  ".join(align_parts)
 
-        # 陽性テスト・動作制限
         special_pos = [f"{k}({s})" for s in sides_to_eval for k, v in special_results[s].items() if v]
         check_pos = [f"{k}({s})" for s in sides_to_eval for k, v in check_results[s].items() if v]
 
@@ -275,18 +287,17 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 
 【出力形式・条件】
 以下の構成と文字数制限を必ず遵守して出力してください。
-※重要：出力の冒頭や末尾に「理学療法士として作成します」「以下に作成した計画書を提示します」などの前置き・挨拶は【一切不要】です。いきなり【電子カルテ用】の見出しから出力してください。
-※重要：出力する文章には半角・全角問わずアスタリスク記号を一切使用しないでください。強調する場合は「【】」を使用し、箇条書きには「・」を使用してください。
+※重要：出力の冒頭や末尾に挨拶や前置きは一切不要です。いきなり【電子カルテ用】の見出しから出力してください。
+※重要：出力する文章にはアスタリスク記号を一切使用しないでください。強調する場合は「【】」を使用してください。
 
 【電子カルテ用】
-・実施した評価結果を、項目ごとに【改行】や【箇条書き（・）】を用いて、コピペしてそのまま読める視覚的にスッキリとしたレイアウトにしてください。文章を横に長く繋げないこと。
-・ROMやMMTは、評価データにある通り『右〇〇 / 左〇〇』と左右を並べて記載し、対比が分かりやすいように記述すること。
-・優先順位が高い問題点を３つ、改行して箇条書きで挙げる（※優先順位は「改善が見込める」「改善までに時間がかからない」の２つの視点から判断すること）。
+・実施した評価結果を、項目ごとに【改行】や【箇条書き（・）】を用いて、視覚的にスッキリとしたレイアウトにしてください。
+・優先順位が高い問題点を３つ、改行して箇条書きで挙げます（改善が見込める、かつ時間がかからない視点から判断）。
 
 【計画書用】
 ・疼痛について（20文字以内）
-・筋力について（異常・低下がある筋群を優先。20文字以内）
-・可動域について（制限・左右差がある関節運動を優先。20文字以内）
+・筋力について（20文字以内）
+・可動域について（20文字以内）
 ・短期目標（100文字以内）
 ・長期目標（50文字以内）
 ・治療方針（120文字以内）
@@ -295,30 +306,22 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 ・機能障害に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」）
 
 ※定型文の羅列ではなく、この患者の具体的な症状と生活背景を推察した自然な専門用語で作成すること。
-※基本はカルテ記載に適した「常体（だ・である調）」とし、【具体的な対応方針】の2項目のみ「敬体（です・ます調）」を使用してください。その際、「〜ですね」などの馴れ馴れしい話し言葉や、「いらっしゃいます」などの過剰な敬語は【厳禁】です。「〜していきます」「〜を行います」など、計画書として適切かつシンプルな丁寧語を使用し、患者さんやご家族が読んでパッと理解できるよう端的に記載してください。
+※【具体的な対応方針】の2項目のみ「敬体（です・ます調）」を使用してください。その際、過剰な敬語や話し言葉は厳禁です。シンプルな「〜していきます」「〜を行います」といった表現を使い、かつ文末が「ます」で連続しすぎないよう人間らしい自然なリズムで記載してください。
 """
 
         try:
             with st.spinner("Geminiが文章を構成しています..."):
                 genai.configure(api_key=gemini_key)
-                
                 available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                
                 if not available_models:
-                    st.error("お使いのAPIキーで利用できるモデルが見つかりませんでした。")
+                    st.error("モデルが見つかりませんでした。")
                 else:
-                    target_model_name = next((m for m in available_models if 'flash' in m), 
-                                             next((m for m in available_models if 'pro' in m), 
-                                                  available_models[0]))
-                    
+                    target_model_name = next((m for m in available_models if 'flash' in m), available_models[0])
                     model = genai.GenerativeModel(target_model_name)
                     response = model.generate_content(prompt)
-                    
                     st.subheader("✨ Geminiが作成した個別カルテ・計画書")
                     st.success("以下のテキストエリア内をクリックし、Command+Aで全選択してコピーしてください。")
-                    
-                    # 出力結果をテキストエリアに変更（スクリーンリーダーでの読み上げとコピペを容易にするため）
-                    st.text_area("出力結果（ここに生成された文章が表示されます）", response.text, height=600)
+                    st.text_area("出力結果", response.text, height=600)
                     
         except Exception as e:
             st.error(f"エラーが発生しました：{e}")
