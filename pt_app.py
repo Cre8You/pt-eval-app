@@ -11,7 +11,7 @@ JOINT_CONFIG = {
         "mmt": ["頸部伸筋群", "僧帽筋上部", "肩甲挙筋", "前鋸筋", "上腕二頭筋", "上腕三頭筋", "上腕筋", "腕橈骨筋"],
         "sensory": ["C5", "C6", "C7", "C8", "Th1"],
         "special": ["Cervical Flexion-Rotation Test", "Spurlingテスト", "Jacksonテスト", "頸椎牽引テスト", "Hoffmann反射", "Trener反射", "足クローヌス", "Babisnki反射", "Adsonテスト", "Wrightテスト", "Edenテスト"],
-        "check": ["前方頭位(FHP)"]
+        "check": ["前方頭位(FHP)", "胸椎後弯・肩甲骨外転位"]
     },
     "腰部": {
         "rom": {"屈曲": 45, "伸展": 30, "右側屈": 20, "左側屈": 20, "右回旋": 45, "左回旋": 45},
@@ -93,7 +93,7 @@ with st.sidebar:
         sides_to_eval = ["右", "左"]
 
     st.divider()
-    # 計画書変更（先月から今月の変化）
+    # 計画書変更
     st.header("🔄 計画書変更")
     st.caption("※ここに入力すると、治療方針と対応方針の３項目のみを更新して出力します。")
     patient_change = st.text_area("先月から今月の変化（任意）", placeholder="例：安静時痛は軽減したが、右下肢のしびれが残存。歩行距離は延びている。", height=120)
@@ -301,7 +301,6 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
         special_pos = [f"{k}({s})" for s in sides_to_eval for k, v in special_results[s].items() if v]
         check_pos = [f"{k}({s})" for s in sides_to_eval for k, v in check_results[s].items() if v]
 
-        # 計画書変更のテキストが存在するかでプロンプトを分岐
         if patient_change:
             prompt = f"""
 あなたは19年の経験を持つベテラン理学療法士です。以下の評価データと【先月から今月の変化】をもとに、指定された【文字数制限】と【条件】を厳格に守って文章を作成してください。
@@ -321,7 +320,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 ・備考：{free_text}
 
 【出力形式・条件】
-今回は「計画書の更新」です。以下の３項目【のみ】を出力してください。（カルテ内容や目標などの他の項目は一切不要です）
+今回は「計画書の更新」です。以下の３項目【のみ】を出力してください。
 ※重要：出力の冒頭や末尾に挨拶や前置きは一切不要です。いきなり【治療方針】の見出しから出力してください。
 ※重要：出力する文章にはアスタリスク記号を一切使用しないでください。強調する場合は「【】」を使用してください。
 
@@ -377,7 +376,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
         try:
             with st.spinner("Geminiが文章を構成しています..."):
                 genai.configure(api_key=gemini_key)
-                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                available_models = [m.name for m in gemini_key and genai.list_models() if 'generateContent' in m.supported_generation_methods]
                 if not available_models:
                     st.error("モデルが見つかりませんでした。")
                 else:
