@@ -177,7 +177,7 @@ if joint == "頸部":
     with st.expander("📖 デルマトーム（知覚領域）の参考図を開く"):
         try:
             # jpgとpngどちらでアップロードされても対応できるように処理
-            st.image("dermatome.jpg", use_container_width=True)
+            st.image("dermatome1.jpg", use_container_width=True)
         except Exception:
             try:
                 st.image("dermatome.png", use_container_width=True)
