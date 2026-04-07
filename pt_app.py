@@ -9,7 +9,7 @@ JOINT_CONFIG = {
     "頸部": {
         "rom": {"屈曲": 60, "伸展": 50, "右側屈": 50, "左側屈": 50, "右回旋": 60, "左回旋": 60, "CV角": 50},
         "mmt": ["頸部伸筋群", "僧帽筋上部", "肩甲挙筋", "前鋸筋", "上腕二頭筋", "上腕三頭筋", "上腕筋", "腕橈骨筋"],
-        "sensory": ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "T1"],
+        "sensory": ["C5", "C6", "C7", "C8", "Th1"],
         "special": ["Cervical Flexion-Rotation Test", "Spurlingテスト", "Jacksonテスト", "頸椎牽引テスト", "Hoffmann反射", "Trener反射", "足クローヌス", "Babisnki反射", "Adsonテスト", "Wrightテスト", "Edenテスト"],
         "check": ["前方頭位(FHP)"]
     },
@@ -92,6 +92,11 @@ with st.sidebar:
         side = "両側"
         sides_to_eval = ["右", "左"]
 
+    st.divider()
+    # 新機能：計画書変更（先月から今月の変化）
+    st.header("🔄 計画書変更")
+    patient_change = st.text_area("先月から今月の変化（任意）", placeholder="例：安静時痛は軽減したが、右下肢のしびれが残存。歩行距離は延びている。", height=120)
+
 # --- メインエリア：評価入力 ---
 st.header(f"【{joint}】の評価入力")
 
@@ -151,7 +156,6 @@ st.divider()
 if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
     st.subheader("🪡 感覚検査（表在感覚異常など）")
     
-    # 頸部が選ばれた時はdermatome1.jpgを表示
     if joint == "頸部":
         with st.expander("📖 頸部のデルマトーム（知覚領域）を開く"):
             try:
@@ -159,7 +163,6 @@ if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
             except Exception:
                 st.info("💡 GitHubに「dermatome1.jpg」という名前で画像をアップロードすると、ここに図が表示されます！")
                 
-    # 腰部が選ばれた時はdermatome2.jpgを表示
     elif joint == "腰部":
         with st.expander("📖 腰部のデルマトーム（知覚領域）を開く"):
             try:
@@ -170,7 +173,7 @@ if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
     st.caption("感覚異常がある領域にチェックを入れてください。")
     for s in sides_to_eval:
         prefix = f"【{s}】" if side == "両側" else ""
-        c_sens = st.columns(4) # 4列でスッキリ並べる
+        c_sens = st.columns(4)
         for i, sens in enumerate(JOINT_CONFIG[joint]["sensory"]):
             with c_sens[i % 4]:
                 sensory_results[s][sens] = st.checkbox(f"{prefix}{sens}", key=f"sens_{s}_{sens}")
@@ -241,7 +244,6 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
                     mmt_list.append(f"{item}({val})")
         mmt_str = "、\n".join(mmt_list) if mmt_list else "特記なし"
 
-        # 感覚検査の抽出
         sensory_pos = []
         if "sensory" in JOINT_CONFIG[joint]:
             sensory_pos = [f"{k}({s})" for s in sides_to_eval for k, v in sensory_results[s].items() if v]
@@ -298,12 +300,15 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
         special_pos = [f"{k}({s})" for s in sides_to_eval for k, v in special_results[s].items() if v]
         check_pos = [f"{k}({s})" for s in sides_to_eval for k, v in check_results[s].items() if v]
 
+        # 計画書変更のテキストが存在するかでプロンプトに組み込む文章を変える
+        change_text = f"\n・先月から今月の変化：{patient_change}" if patient_change else ""
+
         prompt = f"""
 あなたは19年の経験を持つベテラン理学療法士です。以下の評価データから、指定された【文字数制限】と【条件】を厳格に守って文章を作成してください。
 
 【データ】
 ・患者：{patient_id}（病名：{diagnosis}）
-・部位：{joint} ({side})
+・部位：{joint} ({side}){change_text}
 ・疼痛：{pain_str}
 ・筋力低下・MMT：
 {mmt_str}
@@ -324,6 +329,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 ・優先順位が高い問題点を３つ、改行して箇条書きで挙げます（改善が見込める、かつ時間がかからない視点から判断）。
 
 【計画書用】
+（※「先月から今月の変化」の記載がある場合は、その経過（改善点や残存する課題）を必ず踏まえて、治療方針や対応方針を最新の状態にアップデートして作成すること）
 ・疼痛について（20文字以内）
 ・筋力について（20文字以内）
 ・感覚異常について（20文字以内）
