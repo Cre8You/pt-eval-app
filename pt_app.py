@@ -9,58 +9,63 @@ JOINT_CONFIG = {
     "頸部": {
         "rom": {"屈曲": 60, "伸展": 50, "右側屈": 50, "左側屈": 50, "右回旋": 60, "左回旋": 60, "CV角": 50},
         "mmt": ["頸部伸筋群", "僧帽筋上部", "肩甲挙筋", "前鋸筋", "上腕二頭筋", "上腕三頭筋", "上腕筋", "腕橈骨筋"],
+        "sensory": ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "T1"],
         "special": ["Cervical Flexion-Rotation Test", "Spurlingテスト", "Jacksonテスト", "頸椎牽引テスト", "Hoffmann反射", "Trener反射", "足クローヌス", "Babisnki反射", "Adsonテスト", "Wrightテスト", "Edenテスト"],
-        "check": [
-            "前方頭位(FHP)", 
-            "C1 表在感覚異常", "C2 表在感覚異常", "C3 表在感覚異常", 
-            "C4 表在感覚異常", "C5 表在感覚異常", "C6 表在感覚異常", "C7 表在感覚異常"
-        ]
+        "check": ["前方頭位(FHP)"]
     },
     "腰部": {
         "rom": {"屈曲": 45, "伸展": 30, "右側屈": 20, "左側屈": 20, "右回旋": 45, "左回旋": 45},
         "mmt": ["体幹屈筋群", "体幹伸筋群", "腹斜筋群", "腸腰筋", "大殿筋"],
+        "sensory": ["L1", "L2", "L3", "L4", "L5", "S1"],
         "special": ["SLRテスト", "FNSテスト", "Kempテスト", "Newtonテスト", "Thomasテスト", "Valsalvaテスト", "叩打痛"],
         "check": ["寝返り困難", "起き上がり困難", "立ち上がり困難", "長時間の座位困難", "間欠性跛行", "体幹の側方偏移"]
     },
     "肩関節": {
         "rom": {"屈曲": 180, "伸展": 50, "外転": 180, "内転": 0, "外旋(1st)": 60, "外旋(2nd)": 90, "外旋(3rd)": 90, "内旋(結帯)": None},
         "mmt": ["棘上筋", "棘下筋", "小円筋", "肩甲下筋", "三角筋(前・中・後)", "前鋸筋", "僧帽筋(上・中・下)"],
+        "sensory": [],
         "special": ["Neerテスト", "Hawkins-Kennedy", "Drop Arm", "Painful arc(60-120°)", "Apprehension(前方)", "Apprehension(後方)", "Sulcus sign", "Speedテスト", "Yergasonテスト", "O'Brienテスト"],
         "check": ["洗濯物を干す困難", "着替え困難", "洗髪・洗体困難"]
     },
     "肘関節": {
         "rom": {"屈曲": 145, "伸展": 5, "回外": 90, "回内": 90, "外反": 15},
         "mmt": ["上腕二頭筋", "上腕三頭筋", "上腕筋", "腕橈骨筋", "円回内筋", "方形回内筋", "回外筋", "手関節伸筋", "手関節屈筋"],
+        "sensory": [],
         "special": ["Thomsenテスト", "内側上顆炎テスト", "MCLストレス", "LCLストレス", "ピアノキーサイン", "Tinelサイン(肘部管)"],
         "check": ["食事困難", "洗顔困難", "洗髪困難", "生理的外反の左右差"]
     },
     "手関節": {
         "rom": {"掌屈": 90, "背屈": 70, "橈屈": 25, "尺屈": 55, "母指橈側外転": 60, "母指掌側外転": 90, "母指対立": 0},
         "mmt": ["手関節屈筋", "手関節伸筋"],
+        "sensory": [],
         "special": ["Phalenテスト", "逆Phalenテスト", "Tinelサイン(手根管)", "Tinelサイン(ギヨン管)", "Finkelsteinテスト", "Watsonテスト", "TFCC負荷テスト", "Allenテスト", "Fromentサイン"],
         "check": ["食事困難", "洗顔困難", "洗髪困難", "創部の癒着"]
     },
     "手指": {
         "rom": {"MP屈曲": 90, "MP伸展": 0, "PIP屈曲": 100, "PIP伸展": 0, "DIP屈曲": 80, "DIP伸展": 0},
         "mmt": ["骨間筋", "虫様筋"],
+        "sensory": [],
         "special": ["Elsonテスト", "Bunnel-Littlerテスト", "Tinelサイン(指神経)", "Fromentサイン", "側方動揺性(MP/PIP/DIP)"],
         "check": ["ばね指(A1圧痛・弾発)", "マレット変形", "スワンネック変形", "ボタン穴変形", "ヘバーデン結節", "ブシャール結節", "浮腫・熱感", "食事困難", "書字困難"]
     },
     "股関節": {
         "rom": {"屈曲": 125, "伸展": 15, "外転": 45, "内転": 20, "外旋": 45, "内旋": 45},
         "mmt": ["腸腰筋", "大殿筋", "中殿筋", "大腿筋膜張筋", "ハムストリングス"],
+        "sensory": [],
         "special": ["FADIR", "後方インピンジメント", "FABER(Patrick)", "トレンドレンブルグ徴候", "デュシェンヌ徴候", "スクイーズテスト", "シットアップテスト", "アリスサイン", "テレスコーピング", "クレイグテスト"],
         "check": ["逃避性歩行", "跛行", "分回し歩行", "靴下の着脱困難", "爪切り困難", "脚長差", "骨盤代償"]
     },
     "膝関節": {
         "rom": {"屈曲": 130, "伸展": 0, "足関節背屈": 20, "足関節底屈": 45},
         "mmt": ["大腿四頭筋", "ハムストリングス", "大腿筋膜張筋", "中殿筋"],
+        "sensory": [],
         "special": ["前方引き出し", "後方引き出し", "Lachman", "ピボットシフト", "内側側方動揺", "外側側方動揺", "McMurray", "Apley", "膝蓋跳動", "Grindテスト", "Apprehension", "Wilsonテスト"],
         "check": ["伸展ラグ", "Knee-in(スクワット)", "Knee-in(歩行)", "Lateral thrust", "階段昇降(下り)困難", "和式トイレ困難", "浮腫・熱感"]
     },
     "足関節": {
         "rom": {"背屈": 20, "底屈": 45},
         "mmt": ["前脛骨筋", "長腓骨筋", "短腓骨筋", "第三腓骨筋", "下腿三頭筋", "足趾屈筋", "足趾伸筋"],
+        "sensory": [],
         "special": ["前方引き出し(ATFL)", "内反ストレス(CFL)", "外反ストレス(三角靭帯)", "トンプソンテスト", "スクイーズ(脛腓)", "衝突試験", "Tinelサイン(足根管)", "モートンテスト"],
         "check": ["蹴り出しの弱さ", "扁平足", "外反母趾", "内反小趾", "Toe-out", "階段下り困難", "しゃがみ込み困難"]
     }
@@ -102,6 +107,7 @@ st.divider()
 
 rom_results = {s: {} for s in sides_to_eval}
 mmt_results = {s: {} for s in sides_to_eval}
+sensory_results = {s: {} for s in sides_to_eval}
 special_results = {s: {} for s in sides_to_eval}
 check_results = {s: {} for s in sides_to_eval}
 
@@ -141,6 +147,30 @@ for item in JOINT_CONFIG[joint]["mmt"]:
 
 st.divider()
 
+# --- 感覚検査の独立セクション ---
+if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
+    st.subheader("🪡 感覚検査（表在感覚異常など）")
+    
+    # 頸部が選ばれた時だけデルマトーム図を表示（widthでサイズを小さく固定）
+    if joint == "頸部":
+        with st.expander("📖 デルマトーム（知覚領域）の参考図を開く"):
+            try:
+                st.image("dermatome.jpg", width=400)
+            except Exception:
+                try:
+                    st.image("dermatome.png", width=400)
+                except Exception:
+                    st.info("💡 GitHubに「dermatome.jpg」または「dermatome.png」という名前で画像をアップロードすると、ここに図が表示されます！")
+
+    st.caption("感覚異常がある領域にチェックを入れてください。")
+    for s in sides_to_eval:
+        prefix = f"【{s}】" if side == "両側" else ""
+        c_sens = st.columns(4) # 4列でスッキリ並べる
+        for i, sens in enumerate(JOINT_CONFIG[joint]["sensory"]):
+            with c_sens[i % 4]:
+                sensory_results[s][sens] = st.checkbox(f"{prefix}{sens}", key=f"sens_{s}_{sens}")
+    st.divider()
+
 # 膝関節アライメント入力
 nwb_kk = nwb_aa = wb_kk = wb_aa = None
 hallux_valgus_r = hallux_valgus_l = arch_drop_r = arch_drop_l = weight_bearing_r = weight_bearing_l = None
@@ -171,19 +201,6 @@ if joint == "膝関節":
 
 # スペシャルテスト/チェック
 st.subheader("🧪 陽性テスト・観察項目")
-
-# --- デルマトーム図の表示ギミック ---
-if joint == "頸部":
-    with st.expander("📖 デルマトーム（知覚領域）の参考図を開く"):
-        try:
-            # jpgとpngどちらでアップロードされても対応できるように処理
-            st.image("dermatome1.jpg", use_container_width=True)
-        except Exception:
-            try:
-                st.image("dermatome.png", use_container_width=True)
-            except Exception:
-                st.info("💡 GitHubに「dermatome.jpg」または「dermatome.png」という名前で画像をアップロードすると、ここに図が表示されます！")
-
 st.caption("該当する項目にチェックを入れてください。")
 for s in sides_to_eval:
     prefix = f"【{s}】" if side == "両側" else ""
@@ -218,6 +235,12 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
                 if val:
                     mmt_list.append(f"{item}({val})")
         mmt_str = "、\n".join(mmt_list) if mmt_list else "特記なし"
+
+        # 感覚検査の抽出
+        sensory_pos = []
+        if "sensory" in JOINT_CONFIG[joint]:
+            sensory_pos = [f"{k}({s})" for s in sides_to_eval for k, v in sensory_results[s].items() if v]
+        sensory_str = "、".join(sensory_pos) if sensory_pos else "特記なし"
         
         rom_list = []
         for item, ref in JOINT_CONFIG[joint]["rom"].items():
@@ -279,6 +302,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 ・疼痛：{pain_str}
 ・筋力低下・MMT：
 {mmt_str}
+・感覚異常：{sensory_str}
 ・可動域制限・ROM：
 {rom_str}{knee_align_str}
 ・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
@@ -297,6 +321,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 【計画書用】
 ・疼痛について（20文字以内）
 ・筋力について（20文字以内）
+・感覚異常について（20文字以内）
 ・可動域について（20文字以内）
 ・短期目標（100文字以内）
 ・長期目標（50文字以内）
