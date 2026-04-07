@@ -208,20 +208,46 @@ if joint == "膝関節":
         weight_bearing_l = st.selectbox("【左】荷重", ["前方", "後方"], index=None, placeholder="未評価", key="weight_bearing_l")
     st.divider()
 
-# スペシャルテスト/チェック
-st.subheader("🧪 陽性テスト・観察項目")
-st.caption("該当する項目にチェックを入れてください。")
-for s in sides_to_eval:
-    prefix = f"【{s}】" if side == "両側" else ""
-    c_sp, c_ch = st.columns(2)
-    with c_sp:
+# --- スペシャルテストの独立セクション ---
+st.subheader("🧪 スペシャルテスト")
+st.caption("該当する陽性テストにチェックを入れてください。")
+if side == "両側":
+    c_sp_r, c_sp_l = st.columns(2)
+    with c_sp_r:
+        st.write("『右』")
         for test in JOINT_CONFIG[joint]["special"]:
-            special_results[s][test] = st.checkbox(f"{prefix}{test}", key=f"sp_{s}_{test}")
-    with c_ch:
-        for chk in JOINT_CONFIG[joint]["check"]:
-            check_results[s][chk] = st.checkbox(f"{prefix}{chk}", key=f"ch_{s}_{chk}")
-
+            special_results["右"][test] = st.checkbox(f"【右】{test}", key=f"sp_右_{test}")
+    with c_sp_l:
+        st.write("『左』")
+        for test in JOINT_CONFIG[joint]["special"]:
+            special_results["左"][test] = st.checkbox(f"【左】{test}", key=f"sp_左_{test}")
+else:
+    c_sp = st.columns(3)
+    for i, test in enumerate(JOINT_CONFIG[joint]["special"]):
+        with c_sp[i % 3]:
+            special_results["正中"][test] = st.checkbox(f"{test}", key=f"sp_正中_{test}")
 st.divider()
+
+# --- ADL評価・観察項目の独立セクション ---
+st.subheader("🚶 ADL評価・観察項目")
+st.caption("該当する制限や観察項目にチェックを入れてください。")
+if side == "両側":
+    c_ch_r, c_ch_l = st.columns(2)
+    with c_ch_r:
+        st.write("『右』")
+        for chk in JOINT_CONFIG[joint]["check"]:
+            check_results["右"][chk] = st.checkbox(f"【右】{chk}", key=f"ch_右_{chk}")
+    with c_ch_l:
+        st.write("『左』")
+        for chk in JOINT_CONFIG[joint]["check"]:
+            check_results["左"][chk] = st.checkbox(f"【左】{chk}", key=f"ch_左_{chk}")
+else:
+    c_ch = st.columns(3)
+    for i, chk in enumerate(JOINT_CONFIG[joint]["check"]):
+        with c_ch[i % 3]:
+            check_results["正中"][chk] = st.checkbox(f"{chk}", key=f"ch_正中_{chk}")
+st.divider()
+
 free_text = st.text_area("備考・自由入力（エンドフィールなど）", height=100)
 
 # --- 実行ボタンとGemini連携ロジック ---
@@ -376,7 +402,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
         try:
             with st.spinner("Geminiが文章を構成しています..."):
                 genai.configure(api_key=gemini_key)
-                available_models = [m.name for m in gemini_key and genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
                 if not available_models:
                     st.error("モデルが見つかりませんでした。")
                 else:
