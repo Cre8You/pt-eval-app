@@ -1,5 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
+import datetime
 
 # ページ設定
 st.set_page_config(page_title="理学療法評価AIアシスタント", layout="wide")
@@ -80,9 +81,14 @@ with st.sidebar:
     
     st.divider()
     st.header("📋 基本設定")
-    patient_id = st.text_input("患者IDまたは氏名", "A様")
-    diagnosis = st.text_input("病名を入力", "頸椎症性神経根症")
+    # 並び順と項目名の変更
+    patient_id = st.text_input("患者ID", "000000")
     joint = st.selectbox("評価する部位を選択", list(JOINT_CONFIG.keys()))
+    diagnosis = st.text_input("病名を入力", "頸椎症性神経根症")
+    
+    # 日付入力の追加
+    onset_date = st.date_input("発症日", datetime.date.today())
+    rehab_start_date = st.date_input("リハ開始日", datetime.date.today())
     
     # 頸部・腰部の場合は正中（単一入力）、それ以外は強制的に両側入力にする
     if joint in ["頸部", "腰部"]:
@@ -255,6 +261,12 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
     if not gemini_key:
         st.error("左のサイドバーにAPIキーを入力してください！")
     else:
+        # 期限の計算（149日後）
+        std_deadline = onset_date + datetime.timedelta(days=149)
+        rehab_deadline = rehab_start_date + datetime.timedelta(days=149)
+        std_deadline_str = std_deadline.strftime("%Y年%m月%d日")
+        rehab_deadline_str = rehab_deadline.strftime("%Y年%m月%d日")
+
         pain_str = f"安静時{nrs_rest}, 夜間時{nrs_night}, 動作時{nrs_move}"
         
         mmt_list = []
@@ -382,6 +394,9 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 【電子カルテ用】
 ・実施した評価結果を、項目ごとに【改行】や【箇条書き（・）】を用いて、視覚的にスッキリとしたレイアウトにしてください。
 ・優先順位が高い問題点を３つ、改行して箇条書きで挙げます（改善が見込める、かつ時間がかからない視点から判断）。
+・最後に必ず以下の期限をそのまま記載してください：
+  【標準算定期限】：{std_deadline_str}
+  【リハビリ期限】：{rehab_deadline_str}
 
 【計画書用】
 ・疼痛について（20文字以内）
