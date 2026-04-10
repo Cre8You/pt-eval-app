@@ -79,12 +79,33 @@ with st.sidebar:
     st.header("🔑 AI設定")
     gemini_key = st.text_input("Gemini APIキーを入力", type="password")
     
-    st.divider()
-    st.header("🧠 モデル設定")
-    st.caption("安定して無料で使えるモデルに固定しています。")
-    # APIから探すのをやめ、絶対に動く3つをハードコード
-    safe_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"]
-    selected_model = st.selectbox("使用するAIモデル", safe_models, index=0)
+    selected_model = None
+    
+    # APIキーが入力されたら、実際に使えるモデルの一覧をGoogleから取得する
+    if gemini_key:
+        try:
+            genai.configure(api_key=gemini_key)
+            available_models = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            
+            if available_models:
+                st.divider()
+                st.header("🧠 モデル設定")
+                st.caption("お使いのAPIキーで確実に動くモデルの一覧です。")
+                
+                # 安定して使える1.5-flashを初期値として探す
+                default_idx = 0
+                for i, m_name in enumerate(available_models):
+                    if '1.5-flash' in m_name and '8b' not in m_name:
+                        default_idx = i
+                        break
+                        
+                selected_model = st.selectbox("使用するAIモデル", available_models, index=default_idx)
+                
+                # 罠モデル(2.0や2.5)が選ばれたら警告を出す
+                if "2.0" in selected_model or "2.5" in selected_model:
+                    st.warning("⚠️ 2.0や2.5は無料枠の制限(429エラー)が出やすいモデルです。エラーが出た場合はリストから【gemini-1.5-flash】等を選択してください。")
+        except Exception as e:
+            st.error("APIキーの確認中にエラーが発生しました。正しいキーか確認してください。")
             
     st.divider()
     st.header("📋 基本設定")
@@ -263,6 +284,8 @@ free_text = st.text_area("備考・自由入力（エンドフィールなど）
 if st.button("🚀 AIによるカルテ・計画書の自動生成", use_container_width=True):
     if not gemini_key:
         st.error("左のサイドバーにAPIキーを入力してください！")
+    elif not selected_model:
+        st.error("左のサイドバーでAIモデルが選択されていません。（APIキーが正しいか確認してください）")
     else:
         std_deadline = onset_date + datetime.timedelta(days=149)
         rehab_deadline = rehab_start_date + datetime.timedelta(days=149)
@@ -420,7 +443,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
             with st.spinner(f"Gemini（{selected_model}）が文章を構成しています..."):
                 genai.configure(api_key=gemini_key)
                 
-                # 固定された安全なモデルで直接処理を実行
+                # ユーザーがリストから選んだ「確実に存在するモデル」を使って実行
                 model = genai.GenerativeModel(selected_model)
                 response = model.generate_content(prompt)
 
