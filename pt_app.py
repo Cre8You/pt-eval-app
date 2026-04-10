@@ -79,23 +79,12 @@ with st.sidebar:
     st.header("🔑 AI設定")
     gemini_key = st.text_input("Gemini APIキーを入力", type="password")
     
-    selected_model = "gemini-1.5-flash" # 初期値
-    
-    if gemini_key:
-        try:
-            genai.configure(api_key=gemini_key)
-            # APIキーで使えるモデルの一覧を取得してドロップダウンにする
-            models = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            if models:
-                default_idx = 0
-                for i, m in enumerate(models):
-                    if '1.5-flash' in m and '8b' not in m:
-                        default_idx = i
-                        break
-                st.caption("※エラーが出る場合は、下のリストから別のモデルに変更してみてください。")
-                selected_model = st.selectbox("🧠 使用するAIモデル", models, index=default_idx)
-        except Exception:
-            st.warning("APIキーが正しくないか、モデルを読み込めません。")
+    st.divider()
+    st.header("🧠 モデル設定")
+    st.caption("安定して無料で使えるモデルに固定しています。")
+    # APIから探すのをやめ、絶対に動く3つをハードコード
+    safe_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-1.0-pro"]
+    selected_model = st.selectbox("使用するAIモデル", safe_models, index=0)
             
     st.divider()
     st.header("📋 基本設定")
@@ -431,7 +420,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
             with st.spinner(f"Gemini（{selected_model}）が文章を構成しています..."):
                 genai.configure(api_key=gemini_key)
                 
-                # ユーザーがサイドバーで選んだモデルを直接使う！
+                # 固定された安全なモデルで直接処理を実行
                 model = genai.GenerativeModel(selected_model)
                 response = model.generate_content(prompt)
 
