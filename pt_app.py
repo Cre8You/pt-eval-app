@@ -81,16 +81,13 @@ with st.sidebar:
     
     st.divider()
     st.header("📋 基本設定")
-    # 並び順と項目名の変更
     patient_id = st.text_input("患者ID", "000000")
     joint = st.selectbox("評価する部位を選択", list(JOINT_CONFIG.keys()))
     diagnosis = st.text_input("病名を入力", "頸椎症性神経根症")
     
-    # 日付入力の追加
     onset_date = st.date_input("発症日", datetime.date.today())
     rehab_start_date = st.date_input("リハ開始日", datetime.date.today())
     
-    # 頸部・腰部の場合は正中（単一入力）、それ以外は強制的に両側入力にする
     if joint in ["頸部", "腰部"]:
         side = "正中"
         sides_to_eval = ["正中"]
@@ -99,7 +96,6 @@ with st.sidebar:
         sides_to_eval = ["右", "左"]
 
     st.divider()
-    # 計画書変更
     st.header("🔄 計画書変更")
     st.caption("※ここに入力すると、治療方針と対応方針の３項目のみを更新して出力します。")
     patient_change = st.text_area("先月から今月の変化（任意）", placeholder="例：安静時痛は軽減したが、右下肢のしびれが残存。歩行距離は延びている。", height=120)
@@ -261,7 +257,6 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
     if not gemini_key:
         st.error("左のサイドバーにAPIキーを入力してください！")
     else:
-        # 期限の計算（149日後）
         std_deadline = onset_date + datetime.timedelta(days=149)
         rehab_deadline = rehab_start_date + datetime.timedelta(days=149)
         std_deadline_str = std_deadline.strftime("%Y年%m月%d日")
@@ -417,16 +412,25 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
         try:
             with st.spinner("Geminiが文章を構成しています..."):
                 genai.configure(api_key=gemini_key)
-                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                if not available_models:
-                    st.error("モデルが見つかりませんでした。")
-                else:
-                    target_model_name = next((m for m in available_models if 'flash' in m), available_models[0])
-                    model = genai.GenerativeModel(target_model_name)
+                
+                # --- フォールバック機能の実装 ---
+                try:
+                    # 1. まずは最新モデル(2.5-flash)に挑戦
+                    model = genai.GenerativeModel("gemini-2.5-flash")
                     response = model.generate_content(prompt)
-                    st.subheader("✨ Geminiが作成した個別カルテ・計画書")
-                    st.success("以下のテキストエリア内をクリックし、Command+Aで全選択してコピーしてください。")
-                    st.text_area("出力結果", response.text, height=600)
+                except Exception as inner_e:
+                    # 2. もし429(制限)などのエラーが出たら、安定版モデル(1.5-flash)に切り替え
+                    if "429" in str(inner_e) or "Quota" in str(inner_e):
+                        st.warning("⚠️ 最新モデルの無料枠制限に達したため、自動的に安定版モデル(1.5-flash)で作成しました！")
+                        fallback_model = genai.GenerativeModel("gemini-1.5-flash")
+                        response = fallback_model.generate_content(prompt)
+                    else:
+                        # 制限以外のエラーの場合はそのままエラー表示に回す
+                        raise inner_e
+
+                st.subheader("✨ Geminiが作成した個別カルテ・計画書")
+                st.success("以下のテキストエリア内をクリックし、Command+Aで全選択してコピーしてください。")
+                st.text_area("出力結果", response.text, height=600)
                     
         except Exception as e:
             st.error(f"エラーが発生しました：{e}")
