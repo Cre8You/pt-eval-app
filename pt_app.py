@@ -81,29 +81,36 @@ with st.sidebar:
     
     selected_model = None
     
-    # APIキーが入力されたら、実際に使えるモデルの一覧をGoogleから取得する
     if gemini_key:
         try:
             genai.configure(api_key=gemini_key)
-            available_models = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            all_models = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
             
-            if available_models:
+            if all_models:
+                # 【改修】現場で使える安全なモデルだけを厳選してリストを短くする
+                safe_keywords = ['flash-latest', '1.5-flash', '1.5-pro', '1.0-pro', 'gemini-pro']
+                filtered_models = []
+                for m in all_models:
+                    # エラーの元になる2.0、2.5、軽量版すぎる8b、実験版(exp)、画像用(vision)を除外
+                    if any(k in m for k in safe_keywords) and '8b' not in m and 'exp' not in m and 'vision' not in m and '2.0' not in m and '2.5' not in m:
+                        filtered_models.append(m)
+                
+                # 万が一フィルタリングでゼロになったら全部出す
+                display_models = filtered_models if filtered_models else all_models
+
                 st.divider()
                 st.header("🧠 モデル設定")
-                st.caption("お使いのAPIキーで確実に動くモデルの一覧です。")
+                st.caption("安定して使えるモデルだけを厳選表示しています。")
                 
-                # 安定して使える1.5-flashを初期値として探す
+                # 先ほど成功した 'flash-latest' を最優先で初期値にする
                 default_idx = 0
-                for i, m_name in enumerate(available_models):
-                    if '1.5-flash' in m_name and '8b' not in m_name:
+                for i, m_name in enumerate(display_models):
+                    if 'flash-latest' in m_name:
                         default_idx = i
                         break
                         
-                selected_model = st.selectbox("使用するAIモデル", available_models, index=default_idx)
+                selected_model = st.selectbox("使用するAIモデル", display_models, index=default_idx)
                 
-                # 罠モデル(2.0や2.5)が選ばれたら警告を出す
-                if "2.0" in selected_model or "2.5" in selected_model:
-                    st.warning("⚠️ 2.0や2.5は無料枠の制限(429エラー)が出やすいモデルです。エラーが出た場合はリストから【gemini-1.5-flash】等を選択してください。")
         except Exception as e:
             st.error("APIキーの確認中にエラーが発生しました。正しいキーか確認してください。")
             
@@ -442,8 +449,6 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
         try:
             with st.spinner(f"Gemini（{selected_model}）が文章を構成しています..."):
                 genai.configure(api_key=gemini_key)
-                
-                # ユーザーがリストから選んだ「確実に存在するモデル」を使って実行
                 model = genai.GenerativeModel(selected_model)
                 response = model.generate_content(prompt)
 
