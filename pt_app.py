@@ -413,30 +413,23 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
             with st.spinner("Geminiが文章を構成しています..."):
                 genai.configure(api_key=gemini_key)
                 
-                # --- 動的なモデル探索とフォールバック ---
+                # 利用可能な全モデルを取得
                 available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
                 
                 if not available_models:
                     st.error("利用可能なモデルが見つかりませんでした。APIキーを確認してください。")
                 else:
-                    # 最新モデル(2.5)と安定版(1.5)の正式なパスをリストから確実に探す
-                    model_2_5 = next((m for m in available_models if '2.5-flash' in m), None)
-                    model_1_5 = next((m for m in available_models if '1.5-flash' in m), None)
-                    any_flash = next((m for m in available_models if 'flash' in m), available_models[0])
+                    # エラーの元凶である「2.5」をリストから完全に除外し、安全な1.5のFlashモデルを探す
+                    safe_models = [m for m in available_models if '2.5' not in m and 'flash' in m]
                     
-                    target_model = model_2_5 if model_2_5 else any_flash
-                    fallback_target = model_1_5 if model_1_5 else any_flash
+                    # 念のため、1.5系のflashがなければ、2.5以外の何かを選ぶ
+                    if safe_models:
+                        target_model = safe_models[0]
+                    else:
+                        target_model = next((m for m in available_models if '2.5' not in m), available_models[0])
 
-                    try:
-                        model = genai.GenerativeModel(target_model)
-                        response = model.generate_content(prompt)
-                    except Exception as inner_e:
-                        if "429" in str(inner_e) or "Quota" in str(inner_e):
-                            st.warning("⚠️ 最新モデルの無料枠制限に達したため、安定版モデルで自動作成しました！")
-                            fallback_model = genai.GenerativeModel(fallback_target)
-                            response = fallback_model.generate_content(prompt)
-                        else:
-                            raise inner_e
+                    model = genai.GenerativeModel(target_model)
+                    response = model.generate_content(prompt)
 
                     st.subheader("✨ Geminiが作成した個別カルテ・計画書")
                     st.success("以下のテキストエリア内をクリックし、Command+Aで全選択してコピーしてください。")
