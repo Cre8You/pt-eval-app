@@ -79,6 +79,24 @@ with st.sidebar:
     st.header("🔑 AI設定")
     gemini_key = st.text_input("Gemini APIキーを入力", type="password")
     
+    selected_model = "gemini-1.5-flash" # 初期値
+    
+    if gemini_key:
+        try:
+            genai.configure(api_key=gemini_key)
+            # APIキーで使えるモデルの一覧を取得してドロップダウンにする
+            models = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            if models:
+                default_idx = 0
+                for i, m in enumerate(models):
+                    if '1.5-flash' in m and '8b' not in m:
+                        default_idx = i
+                        break
+                st.caption("※エラーが出る場合は、下のリストから別のモデルに変更してみてください。")
+                selected_model = st.selectbox("🧠 使用するAIモデル", models, index=default_idx)
+        except Exception:
+            st.warning("APIキーが正しくないか、モデルを読み込めません。")
+            
     st.divider()
     st.header("📋 基本設定")
     patient_id = st.text_input("患者ID", "000000")
@@ -410,38 +428,16 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 """
 
         try:
-            with st.spinner("Geminiが文章を構成しています..."):
+            with st.spinner(f"Gemini（{selected_model}）が文章を構成しています..."):
                 genai.configure(api_key=gemini_key)
                 
-                # 利用可能な全モデルを取得
-                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                
-                if not available_models:
-                    st.error("利用可能なモデルが見つかりませんでした。APIキーを確認してください。")
-                else:
-                    # エラーの原因である最新版を【完全に排除】し、安全な1.5モデルを直接指名する
-                    target_model = None
-                    for m in available_models:
-                        if '1.5-flash' in m:
-                            target_model = m
-                            break
-                    
-                    # 万が一1.5が見つからなかった場合の究極の安全策（昔からあるgemini-pro）
-                    if not target_model:
-                        for m in available_models:
-                            if 'gemini-pro' in m or '1.0-pro' in m:
-                                target_model = m
-                                break
-                    
-                    if not target_model:
-                        target_model = available_models[0]
+                # ユーザーがサイドバーで選んだモデルを直接使う！
+                model = genai.GenerativeModel(selected_model)
+                response = model.generate_content(prompt)
 
-                    model = genai.GenerativeModel(target_model)
-                    response = model.generate_content(prompt)
-
-                    st.subheader("✨ Geminiが作成した個別カルテ・計画書")
-                    st.success("以下のテキストエリア内をクリックし、Command+Aで全選択してコピーしてください。")
-                    st.text_area("出力結果", response.text, height=600)
+                st.subheader("✨ Geminiが作成した個別カルテ・計画書")
+                st.success("以下のテキストエリア内をクリックし、Command+Aで全選択してコピーしてください。")
+                st.text_area("出力結果", response.text, height=600)
                     
         except Exception as e:
             st.error(f"エラーが発生しました：{e}")
