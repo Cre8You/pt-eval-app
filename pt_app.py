@@ -419,14 +419,22 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
                 if not available_models:
                     st.error("利用可能なモデルが見つかりませんでした。APIキーを確認してください。")
                 else:
-                    # エラーの元凶である「2.5」をリストから完全に除外し、安全な1.5のFlashモデルを探す
-                    safe_models = [m for m in available_models if '2.5' not in m and 'flash' in m]
+                    # エラーの原因である最新版を【完全に排除】し、安全な1.5モデルを直接指名する
+                    target_model = None
+                    for m in available_models:
+                        if '1.5-flash' in m:
+                            target_model = m
+                            break
                     
-                    # 念のため、1.5系のflashがなければ、2.5以外の何かを選ぶ
-                    if safe_models:
-                        target_model = safe_models[0]
-                    else:
-                        target_model = next((m for m in available_models if '2.5' not in m), available_models[0])
+                    # 万が一1.5が見つからなかった場合の究極の安全策（昔からあるgemini-pro）
+                    if not target_model:
+                        for m in available_models:
+                            if 'gemini-pro' in m or '1.0-pro' in m:
+                                target_model = m
+                                break
+                    
+                    if not target_model:
+                        target_model = available_models[0]
 
                     model = genai.GenerativeModel(target_model)
                     response = model.generate_content(prompt)
