@@ -79,40 +79,19 @@ with st.sidebar:
     st.header("🔑 AI設定")
     gemini_key = st.text_input("Gemini APIキーを入力", type="password")
     
-    selected_model = None
+    st.divider()
+    st.header("🧠 モデル設定")
+    st.caption("無料で安定して使える超・優秀なモデルを厳選しました！")
     
-    if gemini_key:
-        try:
-            genai.configure(api_key=gemini_key)
-            all_models = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            
-            if all_models:
-                # 【改修】現場で使える安全なモデルだけを厳選してリストを短くする
-                safe_keywords = ['flash-latest', '1.5-flash', '1.5-pro', '1.0-pro', 'gemini-pro']
-                filtered_models = []
-                for m in all_models:
-                    # エラーの元になる2.0、2.5、軽量版すぎる8b、実験版(exp)、画像用(vision)を除外
-                    if any(k in m for k in safe_keywords) and '8b' not in m and 'exp' not in m and 'vision' not in m and '2.0' not in m and '2.5' not in m:
-                        filtered_models.append(m)
-                
-                # 万が一フィルタリングでゼロになったら全部出す
-                display_models = filtered_models if filtered_models else all_models
-
-                st.divider()
-                st.header("🧠 モデル設定")
-                st.caption("安定して使えるモデルだけを厳選表示しています。")
-                
-                # 先ほど成功した 'flash-latest' を最優先で初期値にする
-                default_idx = 0
-                for i, m_name in enumerate(display_models):
-                    if 'flash-latest' in m_name:
-                        default_idx = i
-                        break
-                        
-                selected_model = st.selectbox("使用するAIモデル", display_models, index=default_idx)
-                
-        except Exception as e:
-            st.error("APIキーの確認中にエラーが発生しました。正しいキーか確認してください。")
+    # 【改修】APIから探すのをやめ、絶対に動く選ばれし4つを直接リスト化
+    safe_models = [
+        "gemini-3.1-flash-lite", # 1日500回無料！
+        "gemini-flash-latest",   # 先ほど大成功したモデル！
+        "gemini-1.5-flash",      # 1日1500回無料！
+        "gemini-1.5-pro"         # 少し賢い版（1日50回）
+    ]
+    
+    selected_model = st.selectbox("使用するAIモデル", safe_models, index=0)
             
     st.divider()
     st.header("📋 基本設定")
@@ -292,7 +271,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
     if not gemini_key:
         st.error("左のサイドバーにAPIキーを入力してください！")
     elif not selected_model:
-        st.error("左のサイドバーでAIモデルが選択されていません。（APIキーが正しいか確認してください）")
+        st.error("左のサイドバーでAIモデルが選択されていません。")
     else:
         std_deadline = onset_date + datetime.timedelta(days=149)
         rehab_deadline = rehab_start_date + datetime.timedelta(days=149)
