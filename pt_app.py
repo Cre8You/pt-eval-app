@@ -79,19 +79,19 @@ with st.sidebar:
     st.header("🔑 AI設定")
     gemini_key = st.text_input("Gemini APIキーを入力", type="password")
     
+    # モデルの表示名と実際のAPI名の紐付け（上限回数も記載！）
+    MODEL_OPTIONS = {
+        "gemini-flash-latest（1日1500回・基本）": "gemini-flash-latest",
+        "gemini-3.0-flash（1日20回・最新鋭！）": "gemini-3.0-flash",
+        "gemini-2.5-flash（1日20回・高性能！）": "gemini-2.5-flash",
+        "gemini-1.5-pro（1日50回・推論特化）": "gemini-1.5-pro"
+    }
+    
     st.divider()
     st.header("🧠 モデル設定")
-    st.caption("無料で安定して使える超・優秀なモデルを厳選しました！")
-    
-    # 【改修】APIから探すのをやめ、絶対に動く選ばれし4つを直接リスト化
-    safe_models = [
-        "gemini-3.1-flash-lite", # 1日500回無料！
-        "gemini-flash-latest",   # 先ほど大成功したモデル！
-        "gemini-1.5-flash",      # 1日1500回無料！
-        "gemini-1.5-pro"         # 少し賢い版（1日50回）
-    ]
-    
-    selected_model = st.selectbox("使用するAIモデル", safe_models, index=0)
+    st.caption("※2.5や3.0でエラー(429)が出た場合は、1日の制限に達しています。一番上の『flash-latest』に戻してください。")
+    selected_label = st.selectbox("使用するAIモデル", list(MODEL_OPTIONS.keys()), index=0)
+    selected_model = MODEL_OPTIONS[selected_label]
             
     st.divider()
     st.header("📋 基本設定")
@@ -264,14 +264,18 @@ else:
             check_results["正中"][chk] = st.checkbox(f"{chk}", key=f"ch_正中_{chk}")
 st.divider()
 
+# --- PT考察の独立セクション ---
+st.subheader("🧠 PT考察（理学療法士の推察・クリニカルリーズニング）")
+st.caption("評価から考えられる原因や、今後のリスク、着目しているポイントなどを自由に入力してください。この内容はAIが問題点抽出や治療方針に色濃く反映させます。")
+pt_observation = st.text_area("PT考察", height=120, placeholder="例：肩甲骨の挙上代償が強く、僧帽筋上部線維の過緊張を招いている。まずは肩甲帯の安定性向上からアプローチする必要がある。")
+st.divider()
+
 free_text = st.text_area("備考・自由入力（エンドフィールなど）", height=100)
 
 # --- 実行ボタンとGemini連携ロジック ---
 if st.button("🚀 AIによるカルテ・計画書の自動生成", use_container_width=True):
     if not gemini_key:
         st.error("左のサイドバーにAPIキーを入力してください！")
-    elif not selected_model:
-        st.error("左のサイドバーでAIモデルが選択されていません。")
     else:
         std_deadline = onset_date + datetime.timedelta(days=149)
         rehab_deadline = rehab_start_date + datetime.timedelta(days=149)
@@ -366,16 +370,18 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 {rom_str}{knee_align_str}
 ・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
 ・動作/制限：{"、".join(check_pos) if check_pos else "特記なし"}
+・PT考察：{pt_observation if pt_observation else "特記なし"}
 ・備考：{free_text}
 
 【出力形式・条件】
 今回は「計画書の更新」です。以下の３項目【のみ】を出力してください。
 ※重要：出力の冒頭や末尾に挨拶や前置きは一切不要です。いきなり【治療方針】の見出しから出力してください。
 ※重要：出力する文章にはアスタリスク記号を一切使用しないでください。強調する場合は「【】」を使用してください。
+※重要：データ内の【PT考察】に入力されている理学療法士の専門的な推察を、治療方針・対応方針に【色濃く反映】させてください。
 
-・治療方針（120文字以内。変化の経過を踏まえて記載）
-・参加制限に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」。変化の経過を踏まえて記載）
-・機能障害に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」。変化の経過を踏まえて記載）
+・治療方針（120文字以内。変化の経過とPT考察を踏まえて記載）
+・参加制限に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」。変化の経過とPT考察を踏まえて記載）
+・機能障害に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」。変化の経過とPT考察を踏まえて記載）
 
 ※定型文の羅列ではなく、この患者の具体的な症状と生活背景を推察した自然な専門用語で作成すること。
 ※【具体的な対応方針】の2項目は「敬体（です・ます調）」を使用してください。その際、過剰な敬語や話し言葉は厳禁です。シンプルな「〜していきます」「〜を行います」といった表現を使い、かつ文末が「ます」で連続しすぎないよう人間らしい自然なリズムで記載してください。
@@ -395,16 +401,18 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 {rom_str}{knee_align_str}
 ・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
 ・動作/制限：{"、".join(check_pos) if check_pos else "特記なし"}
+・PT考察：{pt_observation if pt_observation else "特記なし"}
 ・備考：{free_text}
 
 【出力形式・条件】
 以下の構成と文字数制限を必ず遵守して出力してください。
 ※重要：出力の冒頭や末尾に挨拶や前置きは一切不要です。いきなり【電子カルテ用】の見出しから出力してください。
 ※重要：出力する文章にはアスタリスク記号を一切使用しないでください。強調する場合は「【】」を使用してください。
+※重要：データ内の【PT考察】に入力されている理学療法士の専門的な推察を、優先順位が高い問題点の抽出や、治療方針・対応方針に【色濃く反映】させてください。
 
 【電子カルテ用】
 ・実施した評価結果を、項目ごとに【改行】や【箇条書き（・）】を用いて、視覚的にスッキリとしたレイアウトにしてください。
-・優先順位が高い問題点を３つ、改行して箇条書きで挙げます（改善が見込める、かつ時間がかからない視点から判断）。
+・優先順位が高い問題点を３つ、改行して箇条書きで挙げます（改善が見込める、かつPT考察から導き出される視点から判断）。
 ・最後に必ず以下の期限をそのまま記載してください：
   【標準算定期限】：{std_deadline_str}
   【リハビリ期限】：{rehab_deadline_str}
@@ -426,7 +434,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 """
 
         try:
-            with st.spinner(f"Gemini（{selected_model}）が文章を構成しています..."):
+            with st.spinner(f"Gemini（{selected_label}）が文章を構成しています..."):
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel(selected_model)
                 response = model.generate_content(prompt)
