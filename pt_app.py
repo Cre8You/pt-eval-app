@@ -83,33 +83,18 @@ with st.sidebar:
     st.header("🔑 AI設定")
     gemini_key = st.text_input("Gemini APIキーを入力", type="password")
     
-    selected_model = None
+    MODEL_OPTIONS = {
+        "gemini-flash-latest（1日1500回・基本）": "gemini-flash-latest",
+        "gemini-3.0-flash（1日20回・最新鋭！）": "gemini-3.0-flash",
+        "gemini-2.5-flash（1日20回・高性能！）": "gemini-2.5-flash",
+        "gemini-1.5-pro（1日50回・推論特化）": "gemini-1.5-pro"
+    }
     
-    if gemini_key:
-        try:
-            genai.configure(api_key=gemini_key)
-            all_models = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            
-            if all_models:
-                st.divider()
-                st.header("🧠 モデル設定")
-                st.caption("安全な「flash-latest」と「Proモデル」を自動検索しています。")
-                
-                display_models = []
-                for m in all_models:
-                    if ("flash-latest" in m or "1.5-pro" in m) and 'vision' not in m and 'exp' not in m and '8b' not in m:
-                        display_models.append(m)
-                
-                display_models = list(set(display_models))
-                display_models.sort(key=lambda x: "flash" not in x)
-                
-                if not display_models:
-                    display_models = ["gemini-flash-latest", "gemini-1.5-pro"]
-
-                selected_model = st.selectbox("使用するAIモデル", display_models, index=0)
-                
-        except Exception as e:
-            st.error("APIキーの確認中にエラーが発生しました。正しいキーか確認してください。")
+    st.divider()
+    st.header("🧠 モデル設定")
+    st.caption("※2.5や3.0でエラー(429)が出た場合は、1日の制限に達しています。一番上の『flash-latest』に戻してください。")
+    selected_label = st.selectbox("使用するAIモデル", list(MODEL_OPTIONS.keys()), index=0)
+    selected_model = MODEL_OPTIONS[selected_label]
             
     st.divider()
     st.header("📋 基本設定")
@@ -120,7 +105,6 @@ with st.sidebar:
     onset_date = st.date_input("発症日", datetime.date.today())
     rehab_start_date = st.date_input("リハ開始日", datetime.date.today())
     
-    # 評価部位に基づくサイド設定（腰部はハイブリッドにするため「両側」をベースにしつつ正中も確保）
     if joint in ["頸部"]:
         side = "正中"
         sides_to_eval = ["正中"]
@@ -150,29 +134,42 @@ with c_nrs3: nrs_move = st.selectbox("動作時NRS", nrs_options, index=0)
 st.divider()
 
 rom_results = {s: {} for s in sides_to_eval}
+rom_pain_results = {s: {} for s in sides_to_eval} # 新規追加：ROM疼痛チェック用辞書
 mmt_results = {s: {} for s in sides_to_eval}
 sensory_results = {s: {} for s in sides_to_eval}
 special_results = {s: {} for s in sides_to_eval}
 check_results = {s: {} for s in sides_to_eval}
 
-# ROM入力
+# ROM入力（疼痛チェックボックス追加版）
 st.subheader("📐 関節可動域 (ROM)")
-st.caption("入力した項目のみカルテに反映されます。")
+st.caption("入力した項目のみカルテに反映されます。「疼痛あり」にチェックを入れるとAIが痛みも考慮します。")
 for item, ref in JOINT_CONFIG[joint]["rom"].items():
-    # 腰部の体幹ROM、または頸部のROMは正中のみ
     is_median_item = (joint == "腰部" and item in ["屈曲", "伸展", "右側屈", "左側屈", "右回旋", "左回旋"]) or joint == "頸部"
     
     if is_median_item:
-        rom_results["正中"][item] = st.number_input(f"【正中】{item}", min_value=-50, max_value=200, value=None, step=1, placeholder=str(ref), key=f"c_{item}")
+        c_val, c_pain = st.columns([3, 1])
+        with c_val:
+            rom_results["正中"][item] = st.number_input(f"【正中】{item}", min_value=-50, max_value=200, value=None, step=1, placeholder=str(ref), key=f"c_{item}")
+        with c_pain:
+            st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True) # 入力枠と高さを合わせるための余白
+            rom_pain_results["正中"][item] = st.checkbox("疼痛あり", key=f"cpain_{item}")
+            
     elif side == "両側":
-        c1, c2 = st.columns(2)
+        cr_val, cr_pain, cl_val, cl_pain = st.columns([3, 1, 3, 1])
         if item == "内旋(結帯)":
             opts = ["Th4から8", "Th9から12", "L1から5", "仙骨", "腸骨"]
-            with c1: rom_results["右"][item] = st.selectbox(f"【右】{item}", opts, index=None, placeholder="未測定", key=f"r_{item}")
-            with c2: rom_results["左"][item] = st.selectbox(f"【左】{item}", opts, index=None, placeholder="未測定", key=f"l_{item}")
+            with cr_val: rom_results["右"][item] = st.selectbox(f"【右】{item}", opts, index=None, placeholder="未測定", key=f"r_{item}")
+            with cl_val: rom_results["左"][item] = st.selectbox(f"【左】{item}", opts, index=None, placeholder="未測定", key=f"l_{item}")
         else:
-            with c1: rom_results["右"][item] = st.number_input(f"【右】{item}", min_value=-50, max_value=200, value=None, step=1, placeholder=str(ref), key=f"r_{item}")
-            with c2: rom_results["左"][item] = st.number_input(f"【左】{item}", min_value=-50, max_value=200, value=None, step=1, placeholder=str(ref), key=f"l_{item}")
+            with cr_val: rom_results["右"][item] = st.number_input(f"【右】{item}", min_value=-50, max_value=200, value=None, step=1, placeholder=str(ref), key=f"r_{item}")
+            with cl_val: rom_results["左"][item] = st.number_input(f"【左】{item}", min_value=-50, max_value=200, value=None, step=1, placeholder=str(ref), key=f"l_{item}")
+            
+        with cr_pain:
+            st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
+            rom_pain_results["右"][item] = st.checkbox("疼痛あり", key=f"rpain_{item}")
+        with cl_pain:
+            st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
+            rom_pain_results["左"][item] = st.checkbox("疼痛あり", key=f"lpain_{item}")
 
 st.divider()
 
@@ -181,7 +178,6 @@ st.subheader("💪 徒手筋力テスト (MMT)")
 st.caption("入力した項目のみ反映されます。")
 mmt_opts = ["0", "1", "2", "3-", "3", "3+", "4", "5"]
 for item in JOINT_CONFIG[joint]["mmt"]:
-    # 体幹のMMTは正中のみ
     is_median_item = (joint == "腰部" and item in ["体幹屈筋群", "体幹伸筋群", "腹斜筋群"]) or joint == "頸部"
     
     if is_median_item:
@@ -295,8 +291,6 @@ free_text = st.text_area("備考・自由入力（エンドフィールなど）
 if st.button("🚀 AIによるカルテ・計画書の自動生成", use_container_width=True):
     if not gemini_key:
         st.error("左のサイドバーにAPIキーを入力してください！")
-    elif not selected_model:
-        st.error("左のサイドバーでAIモデルが選択されていません。")
     else:
         std_deadline = onset_date + datetime.timedelta(days=149)
         rehab_deadline = rehab_start_date + datetime.timedelta(days=149)
@@ -305,7 +299,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 
         pain_str = f"安静時{nrs_rest}, 夜間時{nrs_night}, 動作時{nrs_move}"
         
-        # MMTのテキスト化（正中と左右を適切にパース）
+        # MMTのテキスト化
         mmt_list = []
         for item in JOINT_CONFIG[joint]["mmt"]:
             is_median_item = (joint == "腰部" and item in ["体幹屈筋群", "体幹伸筋群", "腹斜筋群"]) or joint == "頸部"
@@ -328,19 +322,25 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
                     if v: sensory_pos.append(f"{k}({s})" if s != "正中" else f"{k}")
         sensory_str = "、".join(sensory_pos) if sensory_pos else "特記なし"
         
-        # ROMのテキスト化
+        # ROMのテキスト化（疼痛情報を含むように改修）
         rom_list = []
         for item in JOINT_CONFIG[joint]["rom"]:
             is_median_item = (joint == "腰部" and item in ["屈曲", "伸展", "右側屈", "左側屈", "右回旋", "左回旋"]) or joint == "頸部"
             if is_median_item:
                 val = rom_results["正中"].get(item)
-                if val is not None: rom_list.append(f"{item}({val}°)")
+                pain_flag = "（疼痛あり）" if rom_pain_results["正中"].get(item) else ""
+                if val is not None: rom_list.append(f"{item}({val}°{pain_flag})")
             elif side == "両側":
                 r_val = rom_results["右"].get(item)
                 l_val = rom_results["左"].get(item)
+                r_pain = "（疼痛あり）" if rom_pain_results["右"].get(item) else ""
+                l_pain = "（疼痛あり）" if rom_pain_results["左"].get(item) else ""
+                
                 if r_val is not None or l_val is not None:
                     suffix = "" if item == "内旋(結帯)" else "°"
-                    rom_list.append(f"{item}(右{r_val if r_val is not None else '-'}{suffix} / 左{l_val if l_val is not None else '-'}{suffix})")
+                    r_str = f"右{r_val if r_val is not None else '-'}{suffix}{r_pain}"
+                    l_str = f"左{l_val if l_val is not None else '-'}{suffix}{l_pain}"
+                    rom_list.append(f"{item}({r_str} / {l_str})")
         rom_str = "、\n".join(rom_list) if rom_list else "特記なし"
 
         # 膝アライメントのテキスト化
@@ -384,8 +384,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 【出力形式・条件】
 今回は「計画書の更新」です。以下の３項目【のみ】を出力してください。
 ※重要：出力の冒頭や末尾に挨拶や前置きは一切不要です。いきなり【治療方針】の見出しから出力してください。
-※重要：出力する文章にはアスタリスク記号を一切使用しないでください。強調する場合は「【】」を使用してください。
-※重要：データ内の【PT考察】に入力されている理学療法士の専門的な推察を、治療方針・対応方針に【色濃く反映】させてください。
+※重要：データ内の【PT考察】に入力されている理学療法士の専門的な推察や、ROM測定時の【疼痛の有無】を、治療方針・対応方針に【色濃く反映】させてください。
 
 ・治療方針（120文字以内。変化の経過とPT考察を踏まえて記載）
 ・参加制限に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」。変化の経過とPT考察を踏まえて記載）
@@ -415,8 +414,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 【出力形式・条件】
 以下の構成と文字数制限を必ず遵守して出力してください。
 ※重要：出力の冒頭や末尾に挨拶や前置きは一切不要です。いきなり【電子カルテ用】の見出しから出力してください。
-※重要：出力する文章にはアスタリスク記号を一切使用しないでください。強調する場合は「【】」を使用してください。
-※重要：データ内の【PT考察】に入力されている理学療法士の専門的な推察を、優先順位が高い問題点の抽出や、治療方針・対応方針に【色濃く反映】させてください。
+※重要：データ内の【PT考察】に入力されている理学療法士の専門的な推察や、ROM測定時の【疼痛の有無】を、優先順位が高い問題点の抽出や、治療方針・対応方針に【色濃く反映】させてください。
 
 【電子カルテ用】
 ・実施した評価結果を、項目ごとに【改行】や【箇条書き（・）】を用いて、視覚的にスッキリとしたレイアウトにしてください。
@@ -429,7 +427,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 ・疼痛について（20文字以内）
 ・筋力について（20文字以内）
 ・感覚異常について（20文字以内）
-・可動域について（20文字以内）
+・可動域について（20文字以内。疼痛を伴う制限がある場合はその旨を記載）
 ・短期目標（100文字以内）
 ・長期目標（50文字以内）
 ・治療方針（120文字以内）
@@ -442,7 +440,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 """
 
         try:
-            with st.spinner(f"Gemini（{selected_model}）が文章を構成しています..."):
+            with st.spinner(f"Gemini（{selected_label}）が文章を構成しています..."):
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel(selected_model)
                 response = model.generate_content(prompt)
