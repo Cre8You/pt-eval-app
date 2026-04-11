@@ -15,10 +15,14 @@ JOINT_CONFIG = {
         "check": ["前方頭位(FHP)", "胸椎後弯・肩甲骨外転位"]
     },
     "腰部": {
-        "rom": {"屈曲": 45, "伸展": 30, "右側屈": 20, "左側屈": 20, "右回旋": 45, "左回旋": 45},
-        "mmt": ["体幹屈筋群", "体幹伸筋群", "腹斜筋群", "腸腰筋", "大殿筋"],
+        "rom": {
+            "屈曲": 45, "伸展": 30, "右側屈": 20, "左側屈": 20, "右回旋": 45, "左回旋": 45,
+            "股関節屈曲": 125, "股関節伸展": 15, "股関節外転": 45, "股関節内転": 20, "股関節外旋": 45, "股関節内旋": 45,
+            "膝関節屈曲": 130, "膝関節伸展": 0, "足関節背屈": 20, "足関節底屈": 45
+        },
+        "mmt": ["体幹屈筋群", "体幹伸筋群", "腹斜筋群", "腸腰筋", "大殿筋", "中殿筋", "大腿筋膜張筋"],
         "sensory": ["L1", "L2", "L3", "L4", "L5", "S1", "S2"],
-        "special": ["SLRテスト", "FNSテスト", "Kempテスト", "Newtonテスト", "Thomasテスト", "Valsalvaテスト", "叩打痛"],
+        "special": ["SLRテスト", "Active-SLR", "FNSテスト", "Kempテスト", "Newtonテスト", "Thomasテスト", "Valsalvaテスト", "叩打痛"],
         "check": ["寝返り困難", "起き上がり困難", "立ち上がり困難", "長時間の座位困難", "間欠性跛行", "体幹の側方偏移"]
     },
     "肩関節": {
@@ -79,32 +83,50 @@ with st.sidebar:
     st.header("🔑 AI設定")
     gemini_key = st.text_input("Gemini APIキーを入力", type="password")
     
-    # モデルの表示名と実際のAPI名の紐付け（上限回数も記載！）
-    MODEL_OPTIONS = {
-        "gemini-flash-latest（1日1500回・基本）": "gemini-flash-latest",
-        "gemini-3.0-flash（1日20回・最新鋭！）": "gemini-3.0-flash",
-        "gemini-2.5-flash（1日20回・高性能！）": "gemini-2.5-flash",
-        "gemini-1.5-pro（1日50回・推論特化）": "gemini-1.5-pro"
-    }
+    selected_model = None
     
-    st.divider()
-    st.header("🧠 モデル設定")
-    st.caption("※2.5や3.0でエラー(429)が出た場合は、1日の制限に達しています。一番上の『flash-latest』に戻してください。")
-    selected_label = st.selectbox("使用するAIモデル", list(MODEL_OPTIONS.keys()), index=0)
-    selected_model = MODEL_OPTIONS[selected_label]
+    if gemini_key:
+        try:
+            genai.configure(api_key=gemini_key)
+            all_models = [m.name.replace('models/', '') for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            
+            if all_models:
+                st.divider()
+                st.header("🧠 モデル設定")
+                st.caption("安全な「flash-latest」と「Proモデル」を自動検索しています。")
+                
+                display_models = []
+                for m in all_models:
+                    if ("flash-latest" in m or "1.5-pro" in m) and 'vision' not in m and 'exp' not in m and '8b' not in m:
+                        display_models.append(m)
+                
+                display_models = list(set(display_models))
+                display_models.sort(key=lambda x: "flash" not in x)
+                
+                if not display_models:
+                    display_models = ["gemini-flash-latest", "gemini-1.5-pro"]
+
+                selected_model = st.selectbox("使用するAIモデル", display_models, index=0)
+                
+        except Exception as e:
+            st.error("APIキーの確認中にエラーが発生しました。正しいキーか確認してください。")
             
     st.divider()
     st.header("📋 基本設定")
     patient_id = st.text_input("患者ID", "000000")
     joint = st.selectbox("評価する部位を選択", list(JOINT_CONFIG.keys()))
-    diagnosis = st.text_input("病名を入力", "頸椎症性神経根症")
+    diagnosis = st.text_input("病名を入力", "腰椎椎間板ヘルニア")
     
     onset_date = st.date_input("発症日", datetime.date.today())
     rehab_start_date = st.date_input("リハ開始日", datetime.date.today())
     
-    if joint in ["頸部", "腰部"]:
+    # 評価部位に基づくサイド設定（腰部はハイブリッドにするため「両側」をベースにしつつ正中も確保）
+    if joint in ["頸部"]:
         side = "正中"
         sides_to_eval = ["正中"]
+    elif joint == "腰部":
+        side = "両側"
+        sides_to_eval = ["右", "左", "正中"]
     else:
         side = "両側"
         sides_to_eval = ["右", "左"]
@@ -137,7 +159,12 @@ check_results = {s: {} for s in sides_to_eval}
 st.subheader("📐 関節可動域 (ROM)")
 st.caption("入力した項目のみカルテに反映されます。")
 for item, ref in JOINT_CONFIG[joint]["rom"].items():
-    if side == "両側":
+    # 腰部の体幹ROM、または頸部のROMは正中のみ
+    is_median_item = (joint == "腰部" and item in ["屈曲", "伸展", "右側屈", "左側屈", "右回旋", "左回旋"]) or joint == "頸部"
+    
+    if is_median_item:
+        rom_results["正中"][item] = st.number_input(f"【正中】{item}", min_value=-50, max_value=200, value=None, step=1, placeholder=str(ref), key=f"c_{item}")
+    elif side == "両側":
         c1, c2 = st.columns(2)
         if item == "内旋(結帯)":
             opts = ["Th4から8", "Th9から12", "L1から5", "仙骨", "腸骨"]
@@ -146,12 +173,6 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
         else:
             with c1: rom_results["右"][item] = st.number_input(f"【右】{item}", min_value=-50, max_value=200, value=None, step=1, placeholder=str(ref), key=f"r_{item}")
             with c2: rom_results["左"][item] = st.number_input(f"【左】{item}", min_value=-50, max_value=200, value=None, step=1, placeholder=str(ref), key=f"l_{item}")
-    else:
-        if item == "内旋(結帯)":
-            opts = ["Th4から8", "Th9から12", "L1から5", "仙骨", "腸骨"]
-            rom_results[side][item] = st.selectbox(f"【{side}】{item}", opts, index=None, placeholder="未測定", key=f"s_{item}")
-        else:
-            rom_results[side][item] = st.number_input(f"【{side}】{item}", min_value=-50, max_value=200, value=None, step=1, placeholder=str(ref), key=f"s_{item}")
 
 st.divider()
 
@@ -160,35 +181,33 @@ st.subheader("💪 徒手筋力テスト (MMT)")
 st.caption("入力した項目のみ反映されます。")
 mmt_opts = ["0", "1", "2", "3-", "3", "3+", "4", "5"]
 for item in JOINT_CONFIG[joint]["mmt"]:
-    if side == "両側":
+    # 体幹のMMTは正中のみ
+    is_median_item = (joint == "腰部" and item in ["体幹屈筋群", "体幹伸筋群", "腹斜筋群"]) or joint == "頸部"
+    
+    if is_median_item:
+        mmt_results["正中"][item] = st.selectbox(f"【正中】{item}", mmt_opts, index=None, placeholder="未実施", key=f"mc_{item}")
+    elif side == "両側":
         c1, c2 = st.columns(2)
         with c1: mmt_results["右"][item] = st.selectbox(f"【右】{item}", mmt_opts, index=None, placeholder="未実施", key=f"mr_{item}")
         with c2: mmt_results["左"][item] = st.selectbox(f"【左】{item}", mmt_opts, index=None, placeholder="未実施", key=f"ml_{item}")
-    else:
-        mmt_results[side][item] = st.selectbox(f"【{side}】{item}", mmt_opts, index=None, placeholder="未実施", key=f"ms_{item}")
 
 st.divider()
 
-# --- 感覚検査の独立セクション ---
+# --- 感覚検査 ---
 if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
     st.subheader("🪡 感覚検査（表在感覚異常など）")
-    
     if joint == "頸部":
         with st.expander("📖 頸部のデルマトーム（知覚領域）を開く"):
-            try:
-                st.image("dermatome1.jpg", width=400)
-            except Exception:
-                st.info("💡 GitHubに「dermatome1.jpg」という名前で画像をアップロードすると、ここに図が表示されます！")
-                
+            try: st.image("dermatome1.jpg", width=400)
+            except: pass
     elif joint == "腰部":
         with st.expander("📖 腰部のデルマトーム（知覚領域）を開く"):
-            try:
-                st.image("dermatome2.jpg", width=400)
-            except Exception:
-                st.info("💡 GitHubに「dermatome2.jpg」という名前で画像をアップロードすると、ここに図が表示されます！")
+            try: st.image("dermatome2.jpg", width=400)
+            except: pass
 
     st.caption("感覚異常がある領域にチェックを入れてください。")
-    for s in sides_to_eval:
+    sensory_sides = ["右", "左"] if side == "両側" else ["正中"]
+    for s in sensory_sides:
         prefix = f"【{s}】" if side == "両側" else ""
         c_sens = st.columns(4)
         for i, sens in enumerate(JOINT_CONFIG[joint]["sensory"]):
@@ -196,7 +215,7 @@ if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
                 sensory_results[s][sens] = st.checkbox(f"{prefix}{sens}", key=f"sens_{s}_{sens}")
     st.divider()
 
-# 膝関節アライメント入力
+# 膝関節アライメント入力（膝関節のみ）
 nwb_kk = nwb_aa = wb_kk = wb_aa = None
 hallux_valgus_r = hallux_valgus_l = arch_drop_r = arch_drop_l = weight_bearing_r = weight_bearing_l = None
 if joint == "膝関節":
@@ -224,7 +243,7 @@ if joint == "膝関節":
         weight_bearing_l = st.selectbox("【左】荷重", ["前方", "後方"], index=None, placeholder="未評価", key="weight_bearing_l")
     st.divider()
 
-# --- スペシャルテストの独立セクション ---
+# --- スペシャルテスト ---
 st.subheader("🧪 スペシャルテスト")
 st.caption("該当する陽性テストにチェックを入れてください。")
 if side == "両側":
@@ -244,10 +263,10 @@ else:
             special_results["正中"][test] = st.checkbox(f"{test}", key=f"sp_正中_{test}")
 st.divider()
 
-# --- ADL評価・観察項目の独立セクション ---
+# --- ADL評価・観察項目 ---
 st.subheader("🚶 ADL評価・観察項目")
 st.caption("該当する制限や観察項目にチェックを入れてください。")
-if side == "両側":
+if side == "両側" and joint != "腰部":
     c_ch_r, c_ch_l = st.columns(2)
     with c_ch_r:
         st.write("『右』")
@@ -257,7 +276,7 @@ if side == "両側":
         st.write("『左』")
         for chk in JOINT_CONFIG[joint]["check"]:
             check_results["左"][chk] = st.checkbox(f"【左】{chk}", key=f"ch_左_{chk}")
-else:
+else: # 頸部 または 腰部（腰部のADL制限は「寝返り困難」など正中ベースの項目が多いので正中表示）
     c_ch = st.columns(3)
     for i, chk in enumerate(JOINT_CONFIG[joint]["check"]):
         with c_ch[i % 3]:
@@ -267,7 +286,7 @@ st.divider()
 # --- PT考察の独立セクション ---
 st.subheader("🧠 PT考察（理学療法士の推察・クリニカルリーズニング）")
 st.caption("評価から考えられる原因や、今後のリスク、着目しているポイントなどを自由に入力してください。この内容はAIが問題点抽出や治療方針に色濃く反映させます。")
-pt_observation = st.text_area("PT考察", height=120, placeholder="例：肩甲骨の挙上代償が強く、僧帽筋上部線維の過緊張を招いている。まずは肩甲帯の安定性向上からアプローチする必要がある。")
+pt_observation = st.text_area("PT考察", height=120, placeholder="例：Active-SLR右陽性より、右腰椎骨盤帯の不安定性が示唆される。股関節屈曲制限による代償が大きいため、まずは股関節周囲筋の柔軟性向上を図る。")
 st.divider()
 
 free_text = st.text_area("備考・自由入力（エンドフィールなど）", height=100)
@@ -276,6 +295,8 @@ free_text = st.text_area("備考・自由入力（エンドフィールなど）
 if st.button("🚀 AIによるカルテ・計画書の自動生成", use_container_width=True):
     if not gemini_key:
         st.error("左のサイドバーにAPIキーを入力してください！")
+    elif not selected_model:
+        st.error("左のサイドバーでAIモデルが選択されていません。")
     else:
         std_deadline = onset_date + datetime.timedelta(days=149)
         rehab_deadline = rehab_start_date + datetime.timedelta(days=149)
@@ -284,51 +305,45 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 
         pain_str = f"安静時{nrs_rest}, 夜間時{nrs_night}, 動作時{nrs_move}"
         
+        # MMTのテキスト化（正中と左右を適切にパース）
         mmt_list = []
         for item in JOINT_CONFIG[joint]["mmt"]:
-            if side == "両側":
-                r_val = mmt_results["右"][item]
-                l_val = mmt_results["左"][item]
+            is_median_item = (joint == "腰部" and item in ["体幹屈筋群", "体幹伸筋群", "腹斜筋群"]) or joint == "頸部"
+            if is_median_item:
+                val = mmt_results["正中"].get(item)
+                if val: mmt_list.append(f"{item}({val})")
+            elif side == "両側":
+                r_val = mmt_results["右"].get(item)
+                l_val = mmt_results["左"].get(item)
                 if r_val or l_val:
-                    mmt_list.append(f"{item}(右{r_val or '未実施'} / 左{l_val or '未実施'})")
-            else:
-                s = sides_to_eval[0]
-                val = mmt_results[s][item]
-                if val:
-                    mmt_list.append(f"{item}({val})")
+                    mmt_list.append(f"{item}(右{r_val or '未'} / 左{l_val or '未'})")
         mmt_str = "、\n".join(mmt_list) if mmt_list else "特記なし"
 
+        # 感覚異常のテキスト化
         sensory_pos = []
         if "sensory" in JOINT_CONFIG[joint]:
-            sensory_pos = [f"{k}({s})" for s in sides_to_eval for k, v in sensory_results[s].items() if v]
+            sensory_sides = ["右", "左"] if side == "両側" else ["正中"]
+            for s in sensory_sides:
+                for k, v in sensory_results[s].items():
+                    if v: sensory_pos.append(f"{k}({s})" if s != "正中" else f"{k}")
         sensory_str = "、".join(sensory_pos) if sensory_pos else "特記なし"
         
+        # ROMのテキスト化
         rom_list = []
-        for item, ref in JOINT_CONFIG[joint]["rom"].items():
-            if item == "内旋(結帯)":
-                if side == "両側":
-                    r_val = rom_results["右"][item]
-                    l_val = rom_results["左"][item]
-                    if r_val or l_val:
-                        rom_list.append(f"{item}(右{r_val or '-'} / 左{l_val or '-'})")
-                else:
-                    s = sides_to_eval[0]
-                    val = rom_results[s][item]
-                    if val:
-                        rom_list.append(f"{item}({val})")
-            else:
-                if side == "両側":
-                    r_val = rom_results["右"][item]
-                    l_val = rom_results["左"][item]
-                    if r_val is not None or l_val is not None:
-                        rom_list.append(f"{item}(右{r_val if r_val is not None else '-'}° / 左{l_val if l_val is not None else '-'}°)")
-                else:
-                    s = sides_to_eval[0]
-                    val = rom_results[s][item]
-                    if val is not None:
-                        rom_list.append(f"{item}({val}°)")
+        for item in JOINT_CONFIG[joint]["rom"]:
+            is_median_item = (joint == "腰部" and item in ["屈曲", "伸展", "右側屈", "左側屈", "右回旋", "左回旋"]) or joint == "頸部"
+            if is_median_item:
+                val = rom_results["正中"].get(item)
+                if val is not None: rom_list.append(f"{item}({val}°)")
+            elif side == "両側":
+                r_val = rom_results["右"].get(item)
+                l_val = rom_results["左"].get(item)
+                if r_val is not None or l_val is not None:
+                    suffix = "" if item == "内旋(結帯)" else "°"
+                    rom_list.append(f"{item}(右{r_val if r_val is not None else '-'}{suffix} / 左{l_val if l_val is not None else '-'}{suffix})")
         rom_str = "、\n".join(rom_list) if rom_list else "特記なし"
 
+        # 膝アライメントのテキスト化
         knee_align_str = ""
         if joint == "膝関節":
             align_parts = []
@@ -336,23 +351,16 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
                 align_parts.append(f"非荷重位：K-K {nwb_kk if nwb_kk is not None else '-'}横指 / A-A {nwb_aa if nwb_aa is not None else '-'}横指")
             if wb_kk is not None or wb_aa is not None:
                 align_parts.append(f"荷重位：K-K {wb_kk if wb_kk is not None else '-'}横指 / A-A {wb_aa if wb_aa is not None else '-'}横指")
-            
             foot_parts = []
-            if hallux_valgus_r or hallux_valgus_l:
-                foot_parts.append(f"外反母趾(右{hallux_valgus_r or '-'} / 左{hallux_valgus_l or '-'})")
-            if arch_drop_r or arch_drop_l:
-                foot_parts.append(f"アーチの低下(右{arch_drop_r or '-'} / 左{arch_drop_l or '-'})")
-            if weight_bearing_r or weight_bearing_l:
-                foot_parts.append(f"荷重(右{weight_bearing_r or '-'} / 左{weight_bearing_l or '-'})")
-            
-            if foot_parts:
-                align_parts.append("足部・荷重：" + "、".join(foot_parts))
+            if hallux_valgus_r or hallux_valgus_l: foot_parts.append(f"外反母趾(右{hallux_valgus_r or '-'} / 左{hallux_valgus_l or '-'})")
+            if arch_drop_r or arch_drop_l: foot_parts.append(f"アーチの低下(右{arch_drop_r or '-'} / 左{arch_drop_l or '-'})")
+            if weight_bearing_r or weight_bearing_l: foot_parts.append(f"荷重(右{weight_bearing_r or '-'} / 左{weight_bearing_l or '-'})")
+            if foot_parts: align_parts.append("足部・荷重：" + "、".join(foot_parts))
+            if align_parts: knee_align_str = "\n・アライメント・足部評価：\n  " + "\n  ".join(align_parts)
 
-            if align_parts:
-                knee_align_str = "\n・アライメント・足部評価：\n  " + "\n  ".join(align_parts)
-
-        special_pos = [f"{k}({s})" for s in sides_to_eval for k, v in special_results[s].items() if v]
-        check_pos = [f"{k}({s})" for s in sides_to_eval for k, v in check_results[s].items() if v]
+        # スペシャルテスト・チェック項目のテキスト化
+        special_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in special_results[s].items() if v]
+        check_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in check_results[s].items() if v]
 
         if patient_change:
             prompt = f"""
@@ -434,7 +442,7 @@ if st.button("🚀 AIによるカルテ・計画書の自動生成", use_contain
 """
 
         try:
-            with st.spinner(f"Gemini（{selected_label}）が文章を構成しています..."):
+            with st.spinner(f"Gemini（{selected_model}）が文章を構成しています..."):
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel(selected_model)
                 response = model.generate_content(prompt)
