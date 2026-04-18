@@ -226,7 +226,6 @@ st.divider()
 # --- 動作観察（腰・股・膝・足関節のみ） ---
 motion_kito = motion_slr_pronation = motion_slr_post = motion_slr_toe = motion_slr_arch = False
 motion_walking = ""
-# 【修正箇所】股関節を追加
 if joint in ["腰部", "股関節", "膝関節", "足関節"]:
     st.subheader("👀 動作観察 (立ち上がり・片脚立位・歩行)")
     c_m1, c_m2 = st.columns(2)
@@ -325,9 +324,12 @@ if st.button("🚀 生成開始", use_container_width=True):
             prompt = f"あなたはベテラン理学療法士です。以下のデータを元に電子カルテと計画書を作成してください。{common_data}\n【条件】挨拶不要。電子カルテ(期限：{std_deadline_str}, {rehab_deadline_str}を含む)と計画書用項目(目標、方針等)を出力。強調は【】を使用。"
 
         try:
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel(selected_model)
-            response = model.generate_content(prompt)
+            # 💡 【復活箇所】ここでスピナー（作成中メッセージ）を表示します！
+            with st.spinner(f"Gemini（{selected_label}）がカルテ・計画書を作成中です... 少々お待ちください！✨"):
+                genai.configure(api_key=gemini_key)
+                model = genai.GenerativeModel(selected_model)
+                response = model.generate_content(prompt)
+                
             st.subheader("✨ 出力結果")
             st.text_area("Copy & Paste", response.text, height=600)
         except Exception as e:
