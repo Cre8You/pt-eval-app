@@ -11,7 +11,6 @@ JOINT_CONFIG = {
         "rom": {"屈曲": 60, "伸展": 50, "右側屈": 50, "左側屈": 50, "右回旋": 60, "左回旋": 60, "CV角": 50},
         "mmt": ["頸部伸筋群", "僧帽筋上部", "肩甲挙筋", "前鋸筋", "上腕二頭筋", "上腕三頭筋", "上腕筋", "腕橈骨筋"],
         "sensory": ["C5", "C6", "C7", "C8", "Th1"],
-        # 【修正箇所】SpurlingテストとJacksonテストを左右に分割
         "special": ["Cervical Flexion-Rotation Test", "Spurlingテスト(右)", "Spurlingテスト(左)", "Jacksonテスト(右)", "Jacksonテスト(左)", "頸椎牽引テスト", "Hoffmann反射", "Trener反射", "足クローヌス", "Babisnki反射", "Adsonテスト", "Wrightテスト", "Edenテスト"],
         "check": ["前方頭位(FHP)", "胸椎後弯・肩甲骨外転位"]
     },
@@ -130,6 +129,8 @@ with c_nrs1: nrs_rest = st.selectbox("安静時NRS", nrs_options, index=0)
 with c_nrs2: nrs_night = st.selectbox("夜間時NRS", nrs_options, index=0)
 with c_nrs3: nrs_move = st.selectbox("動作時NRS", nrs_options, index=0)
 
+pain_notes = st.text_area("疼痛に関する特記事項（部位、性質、放散痛など）", height=80, placeholder="例：右L5領域から下腿外側にかけての放散痛あり。間欠性跛行の要因となっている。")
+
 st.divider()
 
 rom_results = {s: {} for s in sides_to_eval}
@@ -139,13 +140,13 @@ sensory_results = {s: {} for s in sides_to_eval}
 special_results = {s: {} for s in sides_to_eval}
 check_results = {s: {} for s in sides_to_eval}
 
-# ROM入力（疼痛チェック付き）
+# ROM入力（疼痛チェック付き・整数化）
 st.subheader("📐 関節可動域 (ROM)")
 for item, ref in JOINT_CONFIG[joint]["rom"].items():
     is_median_item = (joint == "腰部" and item in ["屈曲", "伸展", "右側屈", "左側屈", "右回旋", "左回旋"]) or joint == "頸部"
     if is_median_item:
         c_val, c_pain = st.columns([3, 1])
-        with c_val: rom_results["正中"][item] = st.number_input(f"【正中】{item}", value=None, placeholder=str(ref), key=f"c_{item}")
+        with c_val: rom_results["正中"][item] = st.number_input(f"【正中】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"c_{item}")
         with c_pain:
             st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
             rom_pain_results["正中"][item] = st.checkbox("疼痛あり", key=f"cpain_{item}")
@@ -156,8 +157,8 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
             with cr_val: rom_results["右"][item] = st.selectbox(f"【右】{item}", opts, index=None, key=f"r_{item}")
             with cl_val: rom_results["左"][item] = st.selectbox(f"【左】{item}", opts, index=None, key=f"l_{item}")
         else:
-            with cr_val: rom_results["右"][item] = st.number_input(f"【右】{item}", value=None, placeholder=str(ref), key=f"r_{item}")
-            with cl_val: rom_results["左"][item] = st.number_input(f"【左】{item}", value=None, placeholder=str(ref), key=f"l_{item}")
+            with cr_val: rom_results["右"][item] = st.number_input(f"【右】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"r_{item}")
+            with cl_val: rom_results["左"][item] = st.number_input(f"【左】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"l_{item}")
         with cr_pain:
             st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
             rom_pain_results["右"][item] = st.checkbox("疼痛あり", key=f"rpain_{item}")
@@ -203,6 +204,34 @@ if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
                 sensory_results[s][sens] = st.checkbox(f"{prefix}{sens}", key=f"sens_{s}_{sens}")
     st.divider()
 
+# 膝関節アライメント入力（膝関節のみ）
+nwb_kk = nwb_aa = wb_kk = wb_aa = None
+hallux_valgus_r = hallux_valgus_l = arch_drop_r = arch_drop_l = weight_bearing_r = weight_bearing_l = None
+if joint == "膝関節":
+    st.subheader("🦵 アライメント・足部評価 (O脚・X脚など)")
+    st.caption("K-K(膝間距離)、A-A(内果間距離)を横指で入力してください。")
+    c_align1, c_align2 = st.columns(2)
+    with c_align1:
+        st.write("『非荷重位』")
+        nwb_kk = st.number_input("【非荷重位】 K-K (横指)", value=None, step=1, format="%d", key="nwb_kk")
+        nwb_aa = st.number_input("【非荷重位】 A-A (横指)", value=None, step=1, format="%d", key="nwb_aa")
+    with c_align2:
+        st.write("『荷重位』")
+        wb_kk = st.number_input("【荷重位】 K-K (横指)", value=None, step=1, format="%d", key="wb_kk")
+        wb_aa = st.number_input("【荷重位】 A-A (横指)", value=None, step=1, format="%d", key="wb_aa")
+    
+    st.write("『足部・荷重評価』")
+    c_foot_r, c_foot_l = st.columns(2)
+    with c_foot_r:
+        hallux_valgus_r = st.selectbox("【右】外反母趾", ["あり", "なし"], index=None, key="hallux_valgus_r")
+        arch_drop_r = st.selectbox("【右】アーチの低下", ["あり", "なし"], index=None, key="arch_drop_r")
+        weight_bearing_r = st.selectbox("【右】荷重", ["前方", "後方"], index=None, key="weight_bearing_r")
+    with c_foot_l:
+        hallux_valgus_l = st.selectbox("【左】外反母趾", ["あり", "なし"], index=None, key="hallux_valgus_l")
+        arch_drop_l = st.selectbox("【左】アーチの低下", ["あり", "なし"], index=None, key="arch_drop_l")
+        weight_bearing_l = st.selectbox("【左】荷重", ["前方", "後方"], index=None, key="weight_bearing_l")
+    st.divider()
+
 # --- スペシャルテスト ---
 st.subheader("🧪 スペシャルテスト")
 st.caption("該当する陽性テストにチェックを入れてください。")
@@ -223,9 +252,27 @@ else:
             special_results["正中"][test] = st.checkbox(f"{test}", key=f"sp_正中_{test}")
 st.divider()
 
+# --- 新設：動作観察（腰・膝・足関節のみ） ---
+motion_kito = motion_slr_pronation = motion_slr_post = motion_slr_toe = motion_slr_arch = False
+motion_walking = ""
+if joint in ["腰部", "膝関節", "足関節"]:
+    st.subheader("👀 動作観察 (立ち上がり・片脚立位・歩行)")
+    c_m1, c_m2 = st.columns(2)
+    with c_m1:
+        st.write("『立ち上がり』")
+        motion_kito = st.checkbox("Knee-in Toe-out (KITO)")
+    with c_m2:
+        st.write("『片脚立位』")
+        motion_slr_pronation = st.checkbox("足部回内")
+        motion_slr_post = st.checkbox("後方重心")
+        motion_slr_toe = st.checkbox("足趾への荷重不足")
+        motion_slr_arch = st.checkbox("内側アーチの低下")
+    
+    motion_walking = st.text_area("『歩行』に関する観察・特記事項", height=80, placeholder="例：立脚中期から後期にかけて、右骨盤の側方スウェー(Duchenne徴候)あり。")
+    st.divider()
+
 # --- ADL評価・観察項目 ---
 st.subheader("🚶 ADL評価・観察項目")
-st.caption("該当する制限や観察項目にチェックを入れてください。")
 if side == "両側" and joint != "腰部":
     c_ch_r, c_ch_l = st.columns(2)
     with c_ch_r:
@@ -236,11 +283,14 @@ if side == "両側" and joint != "腰部":
         st.write("『左』")
         for chk in JOINT_CONFIG[joint]["check"]:
             check_results["左"][chk] = st.checkbox(f"【左】{chk}", key=f"ch_左_{chk}")
-else: # 頸部 または 腰部（腰部のADL制限は「寝返り困難」など正中ベースの項目が多いので正中表示）
+else:
     c_ch = st.columns(3)
     for i, chk in enumerate(JOINT_CONFIG[joint]["check"]):
         with c_ch[i % 3]:
             check_results["正中"][chk] = st.checkbox(f"{chk}", key=f"ch_正中_{chk}")
+
+adl_notes = st.text_area("ADLに関する特記事項（その他の制限や詳細など）", height=80, placeholder="例：床からの立ち上がり時に右膝へ強い痛みが生じるため、手すりが必要。")
+
 st.divider()
 
 # PT考察
@@ -254,25 +304,58 @@ if st.button("🚀 生成開始", use_container_width=True):
     if not gemini_key:
         st.error("APIキーを入力してください")
     else:
-        # 【修正箇所】日付のフォーマットをスラッシュ区切りに変更
         std_deadline = onset_date + datetime.timedelta(days=149)
         rehab_deadline = rehab_start_date + datetime.timedelta(days=149)
         std_deadline_str = std_deadline.strftime("%Y/%m/%d")
         rehab_deadline_str = rehab_deadline.strftime("%Y/%m/%d")
 
-        # 評価データのテキスト化
+        # --- データ変換 ---
+        
+        # 疼痛
+        pain_str = f"安静時{nrs_rest}, 夜間時{nrs_night}, 動作時{nrs_move}"
+        if pain_notes:
+            pain_str += f"（特記：{pain_notes}）"
+
+        # ROM (整数化処理をAIに渡す文字列にも適用)
+        def fmt_val(v):
+            return str(int(v)) if v is not None else "-"
+
         rom_list = []
         for item in JOINT_CONFIG[joint]["rom"]:
             for s in sides_to_eval:
                 val = rom_results[s].get(item)
                 if val is not None:
                     p = "（疼痛あり）" if rom_pain_results[s].get(item) else ""
-                    rom_list.append(f"{item}({s}{val}{p})")
+                    # 数値なら整数化、文字列("Th4-8"など)ならそのまま表示
+                    val_str = fmt_val(val) if isinstance(val, (int, float)) else val
+                    rom_list.append(f"{item}({s}{val_str}{p})")
                     
         special_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in special_results[s].items() if v]
-        check_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in check_results[s].items() if v]
         
-        # 計画書変更がある場合とない場合でのプロンプト分岐
+        # ADL
+        check_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in check_results[s].items() if v]
+        adl_str = "、".join(check_pos) if check_pos else "特記なし"
+        if adl_notes:
+            if adl_str == "特記なし": adl_str = f"特記：{adl_notes}"
+            else: adl_str += f" / 特記：{adl_notes}"
+
+        # 動作観察（該当部位のみ）
+        motion_prompt_line = ""
+        if joint in ["腰部", "膝関節", "足関節"]:
+            m_parts = []
+            if motion_kito: m_parts.append("立ち上がり:KITO")
+            slr_issues = []
+            if motion_slr_pronation: slr_issues.append("足部回内")
+            if motion_slr_post: slr_issues.append("後方重心")
+            if motion_slr_toe: slr_issues.append("足趾への荷重不足")
+            if motion_slr_arch: slr_issues.append("内側アーチの低下")
+            if slr_issues: m_parts.append("片脚立位:" + "、".join(slr_issues))
+            if motion_walking: m_parts.append(f"歩行:{motion_walking}")
+            
+            motion_val = "、".join(m_parts) if m_parts else "特記なし"
+            motion_prompt_line = f"\n・動作観察：{motion_val}"
+        
+        # --- プロンプト組み立て ---
         if patient_change:
             prompt = f"""
 あなたは19年の経験を持つベテラン理学療法士です。以下の評価データと【先月から今月の変化】をもとに、指定された【条件】を厳格に守って文章を作成してください。
@@ -281,10 +364,10 @@ if st.button("🚀 生成開始", use_container_width=True):
 ・病名：{diagnosis}
 ・部位：{joint}
 ・先月から今月の変化：{patient_change}
-・疼痛：安静{nrs_rest},夜間{nrs_night},動作{nrs_move}
-・ROM：{"、".join(rom_list) if rom_list else "特記なし"}
+・疼痛：{pain_str}
+・ROM：{"、".join(rom_list) if rom_list else "特記なし"}{motion_prompt_line}
 ・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
-・動作/制限：{"、".join(check_pos) if check_pos else "特記なし"}
+・動作/制限(ADL)：{adl_str}
 ・PT考察：{pt_observation if pt_observation else "特記なし"}
 
 【条件】
@@ -300,10 +383,10 @@ if st.button("🚀 生成開始", use_container_width=True):
 【データ】
 ・病名：{diagnosis}
 ・部位：{joint}
-・疼痛：安静{nrs_rest},夜間{nrs_night},動作{nrs_move}
-・ROM：{"、".join(rom_list) if rom_list else "特記なし"}
+・疼痛：{pain_str}
+・ROM：{"、".join(rom_list) if rom_list else "特記なし"}{motion_prompt_line}
 ・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
-・動作/制限：{"、".join(check_pos) if check_pos else "特記なし"}
+・動作/制限(ADL)：{adl_str}
 ・PT考察：{pt_observation if pt_observation else "特記なし"}
 
 【条件】
