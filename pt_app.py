@@ -308,23 +308,64 @@ if st.button("🚀 生成開始", use_container_width=True):
             if motion_walking: m_parts.append(f"歩行:{motion_walking}")
             if m_parts: motion_prompt_line = f"\n・動作観察：{'、'.join(m_parts)}"
 
-        # プロンプト組み立て
-        common_data = f"""
+        # 💡 【復活】厳密なフォーマット指定のプロンプト
+        if patient_change:
+            prompt = f"""
+あなたは19年の経験を持つベテラン理学療法士です。以下の評価データと【先月から今月の変化】をもとに、指定された【条件】を厳格に守って文章を作成してください。
+
 【データ】
-・病名：{diagnosis} / 部位：{joint}
+・病名：{diagnosis}
+・部位：{joint}
+・先月から今月の変化：{patient_change}
 ・疼痛：{pain_str}
 ・ROM：{"、".join(rom_list) if rom_list else "特記なし"}{motion_prompt_line}
 ・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
 ・動作/制限(ADL)：{adl_str}
 ・PT考察：{pt_observation if pt_observation else "特記なし"}
+
+【条件】
+今回は「計画書の更新」です。以下の３項目のみを出力してください。挨拶や前置きは不要です。強調には「【】」を使用し、アスタリスクは使わないこと。
+・治療方針（120文字以内。変化の経過とPT考察を踏まえて記載）
+・参加制限に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」）
+・機能障害に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」）
 """
-        if patient_change:
-            prompt = f"あなたはベテラン理学療法士です。以下の変化とデータを元に計画書を更新してください。\n・変化：{patient_change}{common_data}\n【条件】挨拶不要。治療方針(120字)、参加制限対応(200字)、機能障害対応(200字)のみ出力。強調は【】を使用。"
         else:
-            prompt = f"あなたはベテラン理学療法士です。以下のデータを元に電子カルテと計画書を作成してください。{common_data}\n【条件】挨拶不要。電子カルテ(期限：{std_deadline_str}, {rehab_deadline_str}を含む)と計画書用項目(目標、方針等)を出力。強調は【】を使用。"
+            prompt = f"""
+あなたは19年の経験を持つベテラン理学療法士です。以下のデータを元にカルテ・計画書を作成してください。
+
+【データ】
+・病名：{diagnosis}
+・部位：{joint}
+・疼痛：{pain_str}
+・ROM：{"、".join(rom_list) if rom_list else "特記なし"}{motion_prompt_line}
+・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
+・動作/制限(ADL)：{adl_str}
+・PT考察：{pt_observation if pt_observation else "特記なし"}
+
+【条件】
+以下の構成と文字数制限を必ず遵守して出力してください。挨拶や前置きは不要です。いきなり【電子カルテ用】から出力してください。強調には「【】」を使用し、アスタリスクは使わないこと。
+
+【電子カルテ用】
+・実施した評価結果を、項目ごとに改行や箇条書きを用いて視覚的にスッキリとしたレイアウトで記載。
+・優先順位が高い問題点を３つ、改行して箇条書きで挙げます（改善が見込める、かつPT考察から導き出される視点から判断。※長くなりすぎないよう、1項目につき30文字程度で簡潔にまとめてください）。
+・最後に必ず以下の期限をそのまま記載してください：
+  【標準算定期限】：{std_deadline_str}
+  【リハビリ期限】：{rehab_deadline_str}
+
+【計画書用】
+・疼痛について（20文字以内）
+・筋力について（20文字以内）
+・感覚異常について（20文字以内）
+・可動域について（20文字以内。疼痛を伴う制限がある場合はその旨を記載）
+・短期目標（100文字以内）
+・長期目標（50文字以内）
+・治療方針（120文字以内）
+・治療内容（必要な治療プログラムを箇条書きで列挙、最大6行）
+・参加制限に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」）
+・機能障害に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」）
+"""
 
         try:
-            # 💡 【復活箇所】ここでスピナー（作成中メッセージ）を表示します！
             with st.spinner(f"Gemini（{selected_label}）がカルテ・計画書を作成中です... 少々お待ちください！✨"):
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel(selected_model)
