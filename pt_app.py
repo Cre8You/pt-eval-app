@@ -129,7 +129,7 @@ with c_nrs1: nrs_rest = st.selectbox("安静時NRS", nrs_options, index=0)
 with c_nrs2: nrs_night = st.selectbox("夜間時NRS", nrs_options, index=0)
 with c_nrs3: nrs_move = st.selectbox("動作時NRS", nrs_options, index=0)
 
-pain_notes = st.text_area("疼痛に関する特記事項（部位、性質、放散痛など）", height=80, placeholder="例：右L5領域から下腿外側にかけての放散痛あり。間欠性跛行の要因となっている。")
+pain_notes = st.text_area("疼痛に関する特記事項（部位、性質、放散痛など）", height=80, placeholder="例：右L5領域から下腿外側にかけての放散痛あり。")
 
 st.divider()
 
@@ -140,7 +140,7 @@ sensory_results = {s: {} for s in sides_to_eval}
 special_results = {s: {} for s in sides_to_eval}
 check_results = {s: {} for s in sides_to_eval}
 
-# ROM入力（疼痛チェック付き・整数化）
+# ROM入力（整数化）
 st.subheader("📐 関節可動域 (ROM)")
 for item, ref in JOINT_CONFIG[joint]["rom"].items():
     is_median_item = (joint == "腰部" and item in ["屈曲", "伸展", "右側屈", "左側屈", "右回旋", "左回旋"]) or joint == "頸部"
@@ -204,37 +204,8 @@ if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
                 sensory_results[s][sens] = st.checkbox(f"{prefix}{sens}", key=f"sens_{s}_{sens}")
     st.divider()
 
-# 膝関節アライメント入力（膝関節のみ）
-nwb_kk = nwb_aa = wb_kk = wb_aa = None
-hallux_valgus_r = hallux_valgus_l = arch_drop_r = arch_drop_l = weight_bearing_r = weight_bearing_l = None
-if joint == "膝関節":
-    st.subheader("🦵 アライメント・足部評価 (O脚・X脚など)")
-    st.caption("K-K(膝間距離)、A-A(内果間距離)を横指で入力してください。")
-    c_align1, c_align2 = st.columns(2)
-    with c_align1:
-        st.write("『非荷重位』")
-        nwb_kk = st.number_input("【非荷重位】 K-K (横指)", value=None, step=1, format="%d", key="nwb_kk")
-        nwb_aa = st.number_input("【非荷重位】 A-A (横指)", value=None, step=1, format="%d", key="nwb_aa")
-    with c_align2:
-        st.write("『荷重位』")
-        wb_kk = st.number_input("【荷重位】 K-K (横指)", value=None, step=1, format="%d", key="wb_kk")
-        wb_aa = st.number_input("【荷重位】 A-A (横指)", value=None, step=1, format="%d", key="wb_aa")
-    
-    st.write("『足部・荷重評価』")
-    c_foot_r, c_foot_l = st.columns(2)
-    with c_foot_r:
-        hallux_valgus_r = st.selectbox("【右】外反母趾", ["あり", "なし"], index=None, key="hallux_valgus_r")
-        arch_drop_r = st.selectbox("【右】アーチの低下", ["あり", "なし"], index=None, key="arch_drop_r")
-        weight_bearing_r = st.selectbox("【右】荷重", ["前方", "後方"], index=None, key="weight_bearing_r")
-    with c_foot_l:
-        hallux_valgus_l = st.selectbox("【左】外反母趾", ["あり", "なし"], index=None, key="hallux_valgus_l")
-        arch_drop_l = st.selectbox("【左】アーチの低下", ["あり", "なし"], index=None, key="arch_drop_l")
-        weight_bearing_l = st.selectbox("【左】荷重", ["前方", "後方"], index=None, key="weight_bearing_l")
-    st.divider()
-
 # --- スペシャルテスト ---
 st.subheader("🧪 スペシャルテスト")
-st.caption("該当する陽性テストにチェックを入れてください。")
 if side == "両側":
     c_sp_r, c_sp_l = st.columns(2)
     with c_sp_r:
@@ -252,10 +223,11 @@ else:
             special_results["正中"][test] = st.checkbox(f"{test}", key=f"sp_正中_{test}")
 st.divider()
 
-# --- 新設：動作観察（腰・膝・足関節のみ） ---
+# --- 動作観察（腰・股・膝・足関節のみ） ---
 motion_kito = motion_slr_pronation = motion_slr_post = motion_slr_toe = motion_slr_arch = False
 motion_walking = ""
-if joint in ["腰部", "膝関節", "足関節"]:
+# 【修正箇所】股関節を追加
+if joint in ["腰部", "股関節", "膝関節", "足関節"]:
     st.subheader("👀 動作観察 (立ち上がり・片脚立位・歩行)")
     c_m1, c_m2 = st.columns(2)
     with c_m1:
@@ -268,7 +240,7 @@ if joint in ["腰部", "膝関節", "足関節"]:
         motion_slr_toe = st.checkbox("足趾への荷重不足")
         motion_slr_arch = st.checkbox("内側アーチの低下")
     
-    motion_walking = st.text_area("『歩行』に関する観察・特記事項", height=80, placeholder="例：立脚中期から後期にかけて、右骨盤の側方スウェー(Duchenne徴候)あり。")
+    motion_walking = st.text_area("『歩行』に関する観察・特記事項", height=80, placeholder="例：歩行時に股関節伸展代償としての腰椎前弯増強が見られる。")
     st.divider()
 
 # --- ADL評価・観察項目 ---
@@ -289,7 +261,7 @@ else:
         with c_ch[i % 3]:
             check_results["正中"][chk] = st.checkbox(f"{chk}", key=f"ch_正中_{chk}")
 
-adl_notes = st.text_area("ADLに関する特記事項（その他の制限や詳細など）", height=80, placeholder="例：床からの立ち上がり時に右膝へ強い痛みが生じるため、手すりが必要。")
+adl_notes = st.text_area("ADLに関する特記事項（その他の詳細など）", height=80)
 
 st.divider()
 
@@ -309,16 +281,11 @@ if st.button("🚀 生成開始", use_container_width=True):
         std_deadline_str = std_deadline.strftime("%Y/%m/%d")
         rehab_deadline_str = rehab_deadline.strftime("%Y/%m/%d")
 
-        # --- データ変換 ---
-        
-        # 疼痛
+        # データ変換
         pain_str = f"安静時{nrs_rest}, 夜間時{nrs_night}, 動作時{nrs_move}"
-        if pain_notes:
-            pain_str += f"（特記：{pain_notes}）"
+        if pain_notes: pain_str += f"（特記：{pain_notes}）"
 
-        # ROM (整数化処理をAIに渡す文字列にも適用)
-        def fmt_val(v):
-            return str(int(v)) if v is not None else "-"
+        def fmt_val(v): return str(int(v)) if isinstance(v, (int, float)) else str(v)
 
         rom_list = []
         for item in JOINT_CONFIG[joint]["rom"]:
@@ -326,91 +293,37 @@ if st.button("🚀 生成開始", use_container_width=True):
                 val = rom_results[s].get(item)
                 if val is not None:
                     p = "（疼痛あり）" if rom_pain_results[s].get(item) else ""
-                    # 数値なら整数化、文字列("Th4-8"など)ならそのまま表示
-                    val_str = fmt_val(val) if isinstance(val, (int, float)) else val
-                    rom_list.append(f"{item}({s}{val_str}{p})")
+                    rom_list.append(f"{item}({s}{fmt_val(val)}{p})")
                     
         special_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in special_results[s].items() if v]
-        
-        # ADL
         check_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in check_results[s].items() if v]
         adl_str = "、".join(check_pos) if check_pos else "特記なし"
-        if adl_notes:
-            if adl_str == "特記なし": adl_str = f"特記：{adl_notes}"
-            else: adl_str += f" / 特記：{adl_notes}"
+        if adl_notes: adl_str += f" / 特記：{adl_notes}"
 
-        # 動作観察（該当部位のみ）
         motion_prompt_line = ""
-        if joint in ["腰部", "膝関節", "足関節"]:
+        if joint in ["腰部", "股関節", "膝関節", "足関節"]:
             m_parts = []
             if motion_kito: m_parts.append("立ち上がり:KITO")
-            slr_issues = []
-            if motion_slr_pronation: slr_issues.append("足部回内")
-            if motion_slr_post: slr_issues.append("後方重心")
-            if motion_slr_toe: slr_issues.append("足趾への荷重不足")
-            if motion_slr_arch: slr_issues.append("内側アーチの低下")
+            slr_issues = [txt for cond, txt in zip([motion_slr_pronation, motion_slr_post, motion_slr_toe, motion_slr_arch], ["足部回内", "後方重心", "足趾荷重不足", "内側アーチ低下"]) if cond]
             if slr_issues: m_parts.append("片脚立位:" + "、".join(slr_issues))
             if motion_walking: m_parts.append(f"歩行:{motion_walking}")
-            
-            motion_val = "、".join(m_parts) if m_parts else "特記なし"
-            motion_prompt_line = f"\n・動作観察：{motion_val}"
-        
-        # --- プロンプト組み立て ---
+            if m_parts: motion_prompt_line = f"\n・動作観察：{'、'.join(m_parts)}"
+
+        # プロンプト組み立て
+        common_data = f"""
+【データ】
+・病名：{diagnosis} / 部位：{joint}
+・疼痛：{pain_str}
+・ROM：{"、".join(rom_list) if rom_list else "特記なし"}{motion_prompt_line}
+・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
+・動作/制限(ADL)：{adl_str}
+・PT考察：{pt_observation if pt_observation else "特記なし"}
+"""
         if patient_change:
-            prompt = f"""
-あなたは19年の経験を持つベテラン理学療法士です。以下の評価データと【先月から今月の変化】をもとに、指定された【条件】を厳格に守って文章を作成してください。
-
-【データ】
-・病名：{diagnosis}
-・部位：{joint}
-・先月から今月の変化：{patient_change}
-・疼痛：{pain_str}
-・ROM：{"、".join(rom_list) if rom_list else "特記なし"}{motion_prompt_line}
-・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
-・動作/制限(ADL)：{adl_str}
-・PT考察：{pt_observation if pt_observation else "特記なし"}
-
-【条件】
-今回は「計画書の更新」です。以下の３項目のみを出力してください。挨拶や前置きは不要です。強調には「【】」を使用し、アスタリスクは使わないこと。
-・治療方針（120文字以内。変化の経過とPT考察を踏まえて記載）
-・参加制限に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」）
-・機能障害に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」）
-"""
+            prompt = f"あなたはベテラン理学療法士です。以下の変化とデータを元に計画書を更新してください。\n・変化：{patient_change}{common_data}\n【条件】挨拶不要。治療方針(120字)、参加制限対応(200字)、機能障害対応(200字)のみ出力。強調は【】を使用。"
         else:
-            prompt = f"""
-あなたは19年の経験を持つベテラン理学療法士です。以下のデータを元にカルテ・計画書を作成してください。
+            prompt = f"あなたはベテラン理学療法士です。以下のデータを元に電子カルテと計画書を作成してください。{common_data}\n【条件】挨拶不要。電子カルテ(期限：{std_deadline_str}, {rehab_deadline_str}を含む)と計画書用項目(目標、方針等)を出力。強調は【】を使用。"
 
-【データ】
-・病名：{diagnosis}
-・部位：{joint}
-・疼痛：{pain_str}
-・ROM：{"、".join(rom_list) if rom_list else "特記なし"}{motion_prompt_line}
-・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
-・動作/制限(ADL)：{adl_str}
-・PT考察：{pt_observation if pt_observation else "特記なし"}
-
-【条件】
-以下の構成で出力してください。挨拶や前置きは不要です。いきなり【電子カルテ用】から出力してください。強調には「【】」を使用し、アスタリスクは使わないこと。
-
-【電子カルテ用】
-・実施した評価結果を、項目ごとに改行や箇条書きを用いて視覚的にスッキリとしたレイアウトで記載。
-・優先順位が高い問題点を３つ、改行して箇条書きで挙げます（改善が見込める、かつPT考察から導き出される視点から判断。※長くなりすぎないよう、1項目につき30文字程度で簡潔にまとめてください）。
-・最後に必ず以下の期限をそのまま記載してください：
-  【標準算定期限】：{std_deadline_str}
-  【リハビリ期限】：{rehab_deadline_str}
-
-【計画書用】
-・疼痛について（20文字以内）
-・筋力について（20文字以内）
-・感覚異常について（20文字以内）
-・可動域について（20文字以内。疼痛を伴う制限がある場合はその旨を記載）
-・短期目標（100文字以内）
-・長期目標（50文字以内）
-・治療方針（120文字以内）
-・治療内容（必要な治療プログラムを箇条書きで列挙、最大6行）
-・参加制限に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」）
-・機能障害に対する具体的な対応方針（200文字以内、簡潔な「です・ます調」）
-"""
         try:
             genai.configure(api_key=gemini_key)
             model = genai.GenerativeModel(selected_model)
