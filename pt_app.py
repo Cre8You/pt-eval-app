@@ -115,7 +115,8 @@ with st.sidebar:
         sides_to_eval = ["右", "左"]
 
     st.divider()
-    st.header("🔄 計画書変更")
+    st.header("🔄 計画書更新（再評価）")
+    st.caption("※ここに入力すると、出力が【計画書更新用の３項目のみ】になります。空欄にするとフルパッケージが出力されます。")
     patient_change = st.text_area("先月から今月の変化（任意）", placeholder="例：安静時痛は軽減したが、右下肢のしびれが残存。", height=120)
 
 # --- メインエリア：評価入力 ---
@@ -308,7 +309,7 @@ if st.button("🚀 生成開始", use_container_width=True):
             if motion_walking: m_parts.append(f"歩行:{motion_walking}")
             if m_parts: motion_prompt_line = f"\n・動作観察：{'、'.join(m_parts)}"
 
-        # 💡 【復活】厳密なフォーマット指定のプロンプト
+        # 💡 【復活】ここで「変化あり（３項目）」と「変化なし（フル出力）」をパキッと分岐！
         if patient_change:
             prompt = f"""
 あなたは19年の経験を持つベテラン理学療法士です。以下の評価データと【先月から今月の変化】をもとに、指定された【条件】を厳格に守って文章を作成してください。
