@@ -83,12 +83,12 @@ with st.sidebar:
     st.header("🔑 AI設定")
     gemini_key = st.text_input("Gemini APIキーを入力", type="password")
     
-    # 💡【修正箇所】latestを廃止し、確実に1日1500回使える「1.5-flash」を指名！
+    # 💡【修正箇所】エラーが出ない正式名称「-latest」を付与！
     MODEL_OPTIONS = {
-        "gemini-1.5-flash（1日1500回・基本）": "gemini-1.5-flash",
+        "gemini-1.5-flash-latest（1日1500回・基本）": "gemini-1.5-flash-latest",
         "gemini-3.0-flash（1日20回・最新鋭！）": "gemini-3.0-flash",
         "gemini-2.5-flash（1日20回・高性能！）": "gemini-2.5-flash",
-        "gemini-1.5-pro（1日50回・推論特化）": "gemini-1.5-pro"
+        "gemini-1.5-pro-latest（1日50回・推論特化）": "gemini-1.5-pro-latest"
     }
     
     st.divider()
@@ -96,7 +96,6 @@ with st.sidebar:
     selected_label = st.selectbox("使用するAIモデル", list(MODEL_OPTIONS.keys()), index=0)
     selected_model = MODEL_OPTIONS[selected_label]
     
-    # 安心のための確認用テキストを表示
     st.caption(f"現在の接続先: {selected_model}")
             
     st.divider()
