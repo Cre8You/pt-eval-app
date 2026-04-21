@@ -83,8 +83,9 @@ with st.sidebar:
     st.header("🔑 AI設定")
     gemini_key = st.text_input("Gemini APIキーを入力", type="password")
     
+    # 💡【修正箇所】latestを廃止し、確実に1日1500回使える「1.5-flash」を指名！
     MODEL_OPTIONS = {
-        "gemini-flash-latest（1日1500回・基本）": "gemini-flash-latest",
+        "gemini-1.5-flash（1日1500回・基本）": "gemini-1.5-flash",
         "gemini-3.0-flash（1日20回・最新鋭！）": "gemini-3.0-flash",
         "gemini-2.5-flash（1日20回・高性能！）": "gemini-2.5-flash",
         "gemini-1.5-pro（1日50回・推論特化）": "gemini-1.5-pro"
@@ -94,6 +95,9 @@ with st.sidebar:
     st.header("🧠 モデル設定")
     selected_label = st.selectbox("使用するAIモデル", list(MODEL_OPTIONS.keys()), index=0)
     selected_model = MODEL_OPTIONS[selected_label]
+    
+    # 安心のための確認用テキストを表示
+    st.caption(f"現在の接続先: {selected_model}")
             
     st.divider()
     st.header("📋 基本設定")
@@ -309,7 +313,6 @@ if st.button("🚀 生成開始", use_container_width=True):
             if motion_walking: m_parts.append(f"歩行:{motion_walking}")
             if m_parts: motion_prompt_line = f"\n・動作観察：{'、'.join(m_parts)}"
 
-        # プロンプトの共通データ
         common_data = f"""
 【データ】
 ・病名：{diagnosis} / 部位：{joint}
