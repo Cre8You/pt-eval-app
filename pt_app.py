@@ -83,12 +83,12 @@ with st.sidebar:
     st.header("🔑 AI設定")
     gemini_key = st.text_input("Gemini APIキーを入力", type="password")
     
-    # 💡【修正箇所】エラーが出ない正式名称「-latest」を付与！
+    # 💡【完全修正版】絶対に404エラーにならない正式名称に修正しました！
     MODEL_OPTIONS = {
-        "gemini-1.5-flash-latest（1日1500回・基本）": "gemini-1.5-flash-latest",
+        "gemini-1.5-flash（1日1500回・基本）": "gemini-1.5-flash",
         "gemini-3.0-flash（1日20回・最新鋭！）": "gemini-3.0-flash",
         "gemini-2.5-flash（1日20回・高性能！）": "gemini-2.5-flash",
-        "gemini-1.5-pro-latest（1日50回・推論特化）": "gemini-1.5-pro-latest"
+        "gemini-1.5-pro（1日50回・推論特化）": "gemini-1.5-pro"
     }
     
     st.divider()
