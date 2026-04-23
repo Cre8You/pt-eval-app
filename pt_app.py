@@ -88,7 +88,7 @@ with st.sidebar:
     gemini_key = st.text_input("Gemini APIキーを入力", type="password")
     
     MODEL_OPTIONS = {
-        "gemini-3-flash（最新鋭・プレビュー版）": "gemini-3-flash-preview",
+        "gemini-3-flash-preview（最新鋭・プレビュー版）": "gemini-3-flash-preview",
         "gemini-2.5-flash（安定の高性能モデル）": "gemini-2.5-flash"
     }
     
@@ -108,7 +108,6 @@ with st.sidebar:
     onset_date = st.date_input("発症日", datetime.date.today())
     rehab_start_date = st.date_input("リハ開始日", datetime.date.today())
     
-    # 💡【修正】頸部も左右評価を可能に設定（ただしExtensorsは正中扱い）
     if joint in ["頸部"]:
         side = "両側"
         sides_to_eval = ["右", "左", "正中"]
@@ -152,7 +151,6 @@ EF_OPTIONS = ["骨", "靭帯", "筋", "軟部組織"]
 # ROM入力
 st.subheader("📐 関節可動域 (ROM)")
 for item, ref in JOINT_CONFIG[joint]["rom"].items():
-    # 💡【修正】頸部のROMは常に正中（ヘッド全体）として扱う
     is_median_item = (joint == "腰部" and item in ["屈曲", "伸展", "右側屈", "左側屈", "右回旋", "左回旋"]) or joint == "頸部"
     
     if is_median_item:
@@ -215,7 +213,6 @@ st.divider()
 st.subheader("💪 徒手筋力テスト (MMT)")
 mmt_opts = ["0", "1", "2", "3-", "3", "3+", "4", "5"]
 for item in JOINT_CONFIG[joint]["mmt"]:
-    # 💡【修正】頚部伸筋群と体幹特定項目のみを正中（ひとまとめ）として扱う
     is_median_item = (joint == "腰部" and item in ["体幹屈筋群", "体幹伸筋群", "腹斜筋群"]) or (joint == "頸部" and item == "頚部伸筋群")
     
     if is_median_item:
@@ -242,7 +239,6 @@ if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
 
 # --- スペシャルテスト ---
 st.subheader("🧪 スペシャルテスト")
-# 💡【修正】頸部は名称に(右)(左)が含まれるため、1つのリスト形式で表示
 if side == "両側" and joint != "頸部":
     c_sp_r, c_sp_l = st.columns(2)
     with c_sp_r:
@@ -300,6 +296,12 @@ adl_notes = st.text_area("ADLに関する特記事項（その他の詳細など
 
 st.divider()
 
+# 他部門からの情報
+st.subheader("🏥 他部門からの情報")
+other_dept_info = st.text_area("医師や看護師など他部門からの共有事項", height=80, placeholder="例：医師より、右下肢の荷重は1/2PWBの指示あり。看護師より、夜間に不眠の訴えあり。")
+
+st.divider()
+
 # PT考察
 st.subheader("🧠 PT考察")
 pt_observation = st.text_area("PTの臨床推論・原因の仮説", height=120)
@@ -321,7 +323,6 @@ if st.button("🚀 生成開始", use_container_width=True):
 
         def fmt_val(v): return str(int(v)) if isinstance(v, (int, float)) else str(v)
 
-        # ROMの自動フィルター
         rom_list = []
         for item in JOINT_CONFIG[joint]["rom"]:
             ref = JOINT_CONFIG[joint]["rom"][item]
@@ -337,7 +338,6 @@ if st.button("🚀 生成開始", use_container_width=True):
                         ef_str = f"[{'・'.join(endfeel_results[s][item])}]"
                     rom_list.append(f"{item}({s}{fmt_val(val)}{p}{ef_str})")
         
-        # MMTの自動フィルター
         mmt_list = []
         for item in JOINT_CONFIG[joint]["mmt"]:
             for s in sides_to_eval:
@@ -362,6 +362,7 @@ if st.button("🚀 生成開始", use_container_width=True):
         common_data = f"""
 【データ】
 ・病名：{diagnosis} / 部位：{joint}
+・他部門からの情報：{other_dept_info if other_dept_info else "特記なし"}
 ・疼痛：{pain_str}
 ・ROM（制限あり）：{"、".join(rom_list) if rom_list else "特記なし"}{motion_prompt_line}
 ・MMT（4以下）：{"、".join(mmt_list) if mmt_list else "特記なし"}
