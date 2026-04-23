@@ -80,13 +80,16 @@ st.title("🦴 Yudai式：AI理学療法アシスタント")
 
 # --- サイドバー ---
 with st.sidebar:
+    if st.button("🗑️ 入力データをリセット", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+        
     st.header("🔑 AI設定")
     gemini_key = st.text_input("Gemini APIキーを入力", type="password")
     
-    # 💡【完全修正版】廃止された1.5系を削除し、現在稼働している最新モデルに更新しました！
     MODEL_OPTIONS = {
-        "gemini-3-flash（最新モデル・無料枠は1日20回まで）": "gemini-3-flash",
-        "gemini-2.5-flash（安定モデル・無料枠は1日20回まで）": "gemini-2.5-flash"
+        "gemini-3-flash（最新鋭・プレビュー版）": "gemini-3-flash-preview",
+        "gemini-2.5-flash（安定の高性能モデル）": "gemini-2.5-flash"
     }
     
     st.divider()
@@ -136,37 +139,76 @@ st.divider()
 
 rom_results = {s: {} for s in sides_to_eval}
 rom_pain_results = {s: {} for s in sides_to_eval}
+endfeel_results = {s: {} for s in sides_to_eval}
 mmt_results = {s: {} for s in sides_to_eval}
 sensory_results = {s: {} for s in sides_to_eval}
 special_results = {s: {} for s in sides_to_eval}
 check_results = {s: {} for s in sides_to_eval}
 
-# ROM入力（整数化・SLR追加）
+# End-Feelの設定
+needs_ef = joint not in ["頸部", "腰部"]
+EF_OPTIONS = ["骨", "靭帯", "筋", "軟部組織"]
+
+# ROM入力
 st.subheader("📐 関節可動域 (ROM)")
 for item, ref in JOINT_CONFIG[joint]["rom"].items():
     is_median_item = (joint == "腰部" and item in ["屈曲", "伸展", "右側屈", "左側屈", "右回旋", "左回旋"]) or joint == "頸部"
     
     if is_median_item:
-        c_val, c_pain = st.columns([3, 1])
-        with c_val: rom_results["正中"][item] = st.number_input(f"【正中】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"c_{item}")
-        with c_pain:
-            st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
-            rom_pain_results["正中"][item] = st.checkbox("疼痛あり", key=f"cpain_{item}")
-    elif side == "両側":
-        cr_val, cr_pain, cl_val, cl_pain = st.columns([3, 1, 3, 1])
-        if item == "内旋(結帯)":
-            opts = ["Th4-8", "Th9-12", "L1-5", "仙骨", "腸骨"]
-            with cr_val: rom_results["右"][item] = st.selectbox(f"【右】{item}", opts, index=None, key=f"r_{item}")
-            with cl_val: rom_results["左"][item] = st.selectbox(f"【左】{item}", opts, index=None, key=f"l_{item}")
+        if needs_ef:
+            c_val, c_pain, c_ef = st.columns([2, 1, 3])
+            with c_val: rom_results["正中"][item] = st.number_input(f"【正中】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"c_{item}")
+            with c_pain:
+                st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
+                rom_pain_results["正中"][item] = st.checkbox("疼痛あり", key=f"cpain_{item}")
+            with c_ef:
+                st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
+                endfeel_results["正中"][item] = st.multiselect("End-Feel", EF_OPTIONS, key=f"ef_c_{item}", label_visibility="collapsed", placeholder="EFを選択")
         else:
-            with cr_val: rom_results["右"][item] = st.number_input(f"【右】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"r_{item}")
-            with cl_val: rom_results["左"][item] = st.number_input(f"【左】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"l_{item}")
-        with cr_pain:
-            st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
-            rom_pain_results["右"][item] = st.checkbox("疼痛あり", key=f"rpain_{item}")
-        with cl_pain:
-            st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
-            rom_pain_results["左"][item] = st.checkbox("疼痛あり", key=f"lpain_{item}")
+            c_val, c_pain = st.columns([3, 1])
+            with c_val: rom_results["正中"][item] = st.number_input(f"【正中】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"c_{item}")
+            with c_pain:
+                st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
+                rom_pain_results["正中"][item] = st.checkbox("疼痛あり", key=f"cpain_{item}")
+    elif side == "両側":
+        if needs_ef:
+            cr_val, cr_pain, cr_ef, cl_val, cl_pain, cl_ef = st.columns([1.5, 0.8, 2.2, 1.5, 0.8, 2.2])
+            if item == "内旋(結帯)":
+                opts = ["Th4-8", "Th9-12", "L1-5", "仙骨", "腸骨"]
+                with cr_val: rom_results["右"][item] = st.selectbox(f"【右】{item}", opts, index=None, key=f"r_{item}")
+                with cl_val: rom_results["左"][item] = st.selectbox(f"【左】{item}", opts, index=None, key=f"l_{item}")
+            else:
+                with cr_val: rom_results["右"][item] = st.number_input(f"【右】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"r_{item}")
+                with cl_val: rom_results["左"][item] = st.number_input(f"【左】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"l_{item}")
+            
+            with cr_pain:
+                st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
+                rom_pain_results["右"][item] = st.checkbox("疼痛あり", key=f"rpain_{item}")
+            with cl_pain:
+                st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
+                rom_pain_results["左"][item] = st.checkbox("疼痛あり", key=f"lpain_{item}")
+                
+            with cr_ef:
+                st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
+                endfeel_results["右"][item] = st.multiselect("EF", EF_OPTIONS, key=f"ef_r_{item}", label_visibility="collapsed", placeholder="右EF")
+            with cl_ef:
+                st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
+                endfeel_results["左"][item] = st.multiselect("EF", EF_OPTIONS, key=f"ef_l_{item}", label_visibility="collapsed", placeholder="左EF")
+        else:
+            cr_val, cr_pain, cl_val, cl_pain = st.columns([3, 1, 3, 1])
+            if item == "内旋(結帯)":
+                opts = ["Th4-8", "Th9-12", "L1-5", "仙骨", "腸骨"]
+                with cr_val: rom_results["右"][item] = st.selectbox(f"【右】{item}", opts, index=None, key=f"r_{item}")
+                with cl_val: rom_results["左"][item] = st.selectbox(f"【左】{item}", opts, index=None, key=f"l_{item}")
+            else:
+                with cr_val: rom_results["右"][item] = st.number_input(f"【右】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"r_{item}")
+                with cl_val: rom_results["左"][item] = st.number_input(f"【左】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"l_{item}")
+            with cr_pain:
+                st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
+                rom_pain_results["右"][item] = st.checkbox("疼痛あり", key=f"rpain_{item}")
+            with cl_pain:
+                st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
+                rom_pain_results["左"][item] = st.checkbox("疼痛あり", key=f"lpain_{item}")
 
 st.divider()
 
@@ -225,7 +267,7 @@ else:
             special_results["正中"][test] = st.checkbox(f"{test}", key=f"sp_正中_{test}")
 st.divider()
 
-# --- 動作観察（腰・股・膝・足関節のみ） ---
+# --- 動作観察 ---
 motion_kito = motion_slr_pronation = motion_slr_post = motion_slr_toe = motion_slr_arch = False
 motion_walking = ""
 if joint in ["腰部", "股関節", "膝関節", "足関節"]:
@@ -288,13 +330,32 @@ if st.button("🚀 生成開始", use_container_width=True):
 
         def fmt_val(v): return str(int(v)) if isinstance(v, (int, float)) else str(v)
 
+        # 💡【重要】ROMの自動フィルター処理（5度以上の差のみ抽出）
         rom_list = []
         for item in JOINT_CONFIG[joint]["rom"]:
+            ref = JOINT_CONFIG[joint]["rom"][item]
             for s in sides_to_eval:
                 val = rom_results[s].get(item)
                 if val is not None:
+                    # 数値入力の場合、参考可動域との差が5度未満ならスキップ
+                    if isinstance(val, (int, float)) and isinstance(ref, (int, float)):
+                        if abs(val - ref) < 5:
+                            continue
+                            
                     p = "（疼痛あり）" if rom_pain_results[s].get(item) else ""
-                    rom_list.append(f"{item}({s}{fmt_val(val)}{p})")
+                    ef_str = ""
+                    if needs_ef and endfeel_results[s].get(item):
+                        ef_str = f"[{'・'.join(endfeel_results[s][item])}]"
+                        
+                    rom_list.append(f"{item}({s}{fmt_val(val)}{p}{ef_str})")
+        
+        # 💡【重要】MMTの自動フィルター処理（4以下のみ抽出）
+        mmt_list = []
+        for item in JOINT_CONFIG[joint]["mmt"]:
+            for s in sides_to_eval:
+                val = mmt_results[s].get(item)
+                if val is not None and val != "5":
+                    mmt_list.append(f"{item}({s}{val})")
                     
         special_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in special_results[s].items() if v]
         check_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in check_results[s].items() if v]
@@ -310,11 +371,13 @@ if st.button("🚀 生成開始", use_container_width=True):
             if motion_walking: m_parts.append(f"歩行:{motion_walking}")
             if m_parts: motion_prompt_line = f"\n・動作観察：{'、'.join(m_parts)}"
 
+        # 制限のある項目だけをAIに渡す
         common_data = f"""
 【データ】
 ・病名：{diagnosis} / 部位：{joint}
 ・疼痛：{pain_str}
-・ROM：{"、".join(rom_list) if rom_list else "特記なし"}{motion_prompt_line}
+・ROM（制限あり）：{"、".join(rom_list) if rom_list else "特記なし"}{motion_prompt_line}
+・MMT（4以下）：{"、".join(mmt_list) if mmt_list else "特記なし"}
 ・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
 ・動作/制限(ADL)：{adl_str}
 ・PT考察：{pt_observation if pt_observation else "特記なし"}
@@ -359,7 +422,7 @@ if st.button("🚀 生成開始", use_container_width=True):
 ・【短期目標】（100文字以内）
 ・【長期目標】（50文字以内）
 ・【治療方針】（120文字以内）
-・【治療内容】（必要な治療プログラムを箇条書きで列挙、最大6行）
+・【治療内容】（必要な治療プログラムを「①」「②」のような番号付き箇条書きで列挙、最大6行）
 ・【参加制限に対する具体的な対応方針】（200文字以内、簡潔な「です・ます調」。文脈に合わせて適宜改行を入れ、読みやすく整理すること）
 ・【機能障害に対する具体的な対応方針】（200文字以内、簡潔な「です・ます調」。文脈に合わせて適宜改行を入れ、読みやすく整理すること）
 """
