@@ -9,7 +9,7 @@ st.set_page_config(page_title="理学療法評価AIアシスタント", layout="
 JOINT_CONFIG = {
     "頸部": {
         "rom": {"屈曲": 60, "伸展": 50, "右側屈": 50, "左側屈": 50, "右回旋": 60, "左回旋": 60, "CV角": 50},
-        "mmt": ["頸部伸筋群", "僧帽筋上部", "肩甲挙筋", "前鋸筋", "上腕二頭筋", "上腕三頭筋", "上腕筋", "腕橈骨筋"],
+        "mmt": ["頚部伸筋群", "僧帽筋上部", "肩甲挙筋", "前鋸筋", "上腕二頭筋", "上腕三頭筋", "上腕筋", "腕橈骨筋"],
         "sensory": ["C5", "C6", "C7", "C8", "Th1"],
         "special": ["Cervical Flexion-Rotation Test", "Spurlingテスト(右)", "Spurlingテスト(左)", "Jacksonテスト(右)", "Jacksonテスト(左)", "頸椎牽引テスト", "Hoffmann反射", "Trener反射", "足クローヌス", "Babisnki反射", "Adsonテスト", "Wrightテスト", "Edenテスト"],
         "check": ["前方頭位(FHP)", "胸椎後弯・肩甲骨外転位"]
@@ -108,9 +108,10 @@ with st.sidebar:
     onset_date = st.date_input("発症日", datetime.date.today())
     rehab_start_date = st.date_input("リハ開始日", datetime.date.today())
     
+    # 💡【修正】頸部も左右評価を可能に設定（ただしExtensorsは正中扱い）
     if joint in ["頸部"]:
-        side = "正中"
-        sides_to_eval = ["正中"]
+        side = "両側"
+        sides_to_eval = ["右", "左", "正中"]
     elif joint == "腰部":
         side = "両側"
         sides_to_eval = ["右", "左", "正中"]
@@ -145,13 +146,13 @@ sensory_results = {s: {} for s in sides_to_eval}
 special_results = {s: {} for s in sides_to_eval}
 check_results = {s: {} for s in sides_to_eval}
 
-# End-Feelの設定
 needs_ef = joint not in ["頸部", "腰部"]
 EF_OPTIONS = ["骨", "靭帯", "筋", "軟部組織"]
 
 # ROM入力
 st.subheader("📐 関節可動域 (ROM)")
 for item, ref in JOINT_CONFIG[joint]["rom"].items():
+    # 💡【修正】頸部のROMは常に正中（ヘッド全体）として扱う
     is_median_item = (joint == "腰部" and item in ["屈曲", "伸展", "右側屈", "左側屈", "右回旋", "左回旋"]) or joint == "頸部"
     
     if is_median_item:
@@ -180,14 +181,12 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
             else:
                 with cr_val: rom_results["右"][item] = st.number_input(f"【右】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"r_{item}")
                 with cl_val: rom_results["左"][item] = st.number_input(f"【左】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"l_{item}")
-            
             with cr_pain:
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 rom_pain_results["右"][item] = st.checkbox("疼痛あり", key=f"rpain_{item}")
             with cl_pain:
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 rom_pain_results["左"][item] = st.checkbox("疼痛あり", key=f"lpain_{item}")
-                
             with cr_ef:
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 endfeel_results["右"][item] = st.multiselect("EF", EF_OPTIONS, key=f"ef_r_{item}", label_visibility="collapsed", placeholder="右EF")
@@ -216,7 +215,9 @@ st.divider()
 st.subheader("💪 徒手筋力テスト (MMT)")
 mmt_opts = ["0", "1", "2", "3-", "3", "3+", "4", "5"]
 for item in JOINT_CONFIG[joint]["mmt"]:
-    is_median_item = (joint == "腰部" and item in ["体幹屈筋群", "体幹伸筋群", "腹斜筋群"]) or joint == "頸部"
+    # 💡【修正】頚部伸筋群と体幹特定項目のみを正中（ひとまとめ）として扱う
+    is_median_item = (joint == "腰部" and item in ["体幹屈筋群", "体幹伸筋群", "腹斜筋群"]) or (joint == "頸部" and item == "頚部伸筋群")
+    
     if is_median_item:
         mmt_results["正中"][item] = st.selectbox(f"【正中】{item}", mmt_opts, index=None, key=f"mc_{item}")
     elif side == "両側":
@@ -229,15 +230,6 @@ st.divider()
 # --- 感覚検査 ---
 if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
     st.subheader("🪡 感覚検査（表在感覚異常など）")
-    if joint == "頸部":
-        with st.expander("📖 頸部のデルマトーム（知覚領域）を開く"):
-            try: st.image("dermatome1.jpg", width=400)
-            except: pass
-    elif joint == "腰部":
-        with st.expander("📖 腰部のデルマトーム（知覚領域）を開く"):
-            try: st.image("dermatome2.jpg", width=400)
-            except: pass
-
     st.caption("感覚異常がある領域にチェックを入れてください。")
     sensory_sides = ["右", "左"] if side == "両側" else ["正中"]
     for s in sensory_sides:
@@ -250,7 +242,8 @@ if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
 
 # --- スペシャルテスト ---
 st.subheader("🧪 スペシャルテスト")
-if side == "両側":
+# 💡【修正】頸部は名称に(右)(左)が含まれるため、1つのリスト形式で表示
+if side == "両側" and joint != "頸部":
     c_sp_r, c_sp_l = st.columns(2)
     with c_sp_r:
         st.write("『右』")
@@ -282,13 +275,12 @@ if joint in ["腰部", "股関節", "膝関節", "足関節"]:
         motion_slr_post = st.checkbox("後方重心")
         motion_slr_toe = st.checkbox("足趾への荷重不足")
         motion_slr_arch = st.checkbox("内側アーチの低下")
-    
     motion_walking = st.text_area("『歩行』に関する観察・特記事項", height=80, placeholder="例：歩行時に股関節伸展代償としての腰椎前弯増強が見られる。")
     st.divider()
 
 # --- ADL評価・観察項目 ---
 st.subheader("🚶 ADL評価・観察項目")
-if side == "両側" and joint != "腰部":
+if side == "両側" and joint not in ["腰部", "頸部"]:
     c_ch_r, c_ch_l = st.columns(2)
     with c_ch_r:
         st.write("『右』")
@@ -324,32 +316,28 @@ if st.button("🚀 生成開始", use_container_width=True):
         std_deadline_str = std_deadline.strftime("%Y/%m/%d")
         rehab_deadline_str = rehab_deadline.strftime("%Y/%m/%d")
 
-        # データ変換
         pain_str = f"安静時{nrs_rest}, 夜間時{nrs_night}, 動作時{nrs_move}"
         if pain_notes: pain_str += f"（特記：{pain_notes}）"
 
         def fmt_val(v): return str(int(v)) if isinstance(v, (int, float)) else str(v)
 
-        # 💡【重要】ROMの自動フィルター処理（5度以上の差のみ抽出）
+        # ROMの自動フィルター
         rom_list = []
         for item in JOINT_CONFIG[joint]["rom"]:
             ref = JOINT_CONFIG[joint]["rom"][item]
             for s in sides_to_eval:
                 val = rom_results[s].get(item)
                 if val is not None:
-                    # 数値入力の場合、参考可動域との差が5度未満ならスキップ
                     if isinstance(val, (int, float)) and isinstance(ref, (int, float)):
                         if abs(val - ref) < 5:
                             continue
-                            
                     p = "（疼痛あり）" if rom_pain_results[s].get(item) else ""
                     ef_str = ""
                     if needs_ef and endfeel_results[s].get(item):
                         ef_str = f"[{'・'.join(endfeel_results[s][item])}]"
-                        
                     rom_list.append(f"{item}({s}{fmt_val(val)}{p}{ef_str})")
         
-        # 💡【重要】MMTの自動フィルター処理（4以下のみ抽出）
+        # MMTの自動フィルター
         mmt_list = []
         for item in JOINT_CONFIG[joint]["mmt"]:
             for s in sides_to_eval:
@@ -371,7 +359,6 @@ if st.button("🚀 生成開始", use_container_width=True):
             if motion_walking: m_parts.append(f"歩行:{motion_walking}")
             if m_parts: motion_prompt_line = f"\n・動作観察：{'、'.join(m_parts)}"
 
-        # 制限のある項目だけをAIに渡す
         common_data = f"""
 【データ】
 ・病名：{diagnosis} / 部位：{joint}
@@ -386,53 +373,46 @@ if st.button("🚀 生成開始", use_container_width=True):
         if patient_change:
             prompt = f"""
 あなたは19年の経験を持つベテラン理学療法士です。以下の評価データと【先月から今月の変化】をもとに、指定された【条件】を厳格に守って文章を作成してください。
-
 {common_data}
 ・先月から今月の変化：{patient_change}
-
 【条件】
 今回は「計画書の更新」です。以下の【５項目】のみを出力してください。挨拶や前置きは不要です。文章中での強調記号（カッコやアスタリスク等）は一切使用しないでください（指定した項目名のみ【】を使用可）。
-・【短期目標】（100文字以内。変化の経過を踏まえて記載）
-・【長期目標】（50文字以内。変化の経過を踏まえて記載）
-・【治療方針】（120文字以内。変化の経過とPT考察を踏まえて記載）
-・【参加制限に対する具体的な対応方針】（200文字以内、簡潔な「です・ます調」。文脈に合わせて適宜改行を入れ、読みやすく整理すること）
-・【機能障害に対する具体的な対応方針】（200文字以内、簡潔な「です・ます調」。文脈に合わせて適宜改行を入れ、読みやすく整理すること）
+・【短期目標】
+・【長期目標】
+・【治療方針】
+・【参加制限に対する具体的な対応方針】
+・【機能障害に対する具体的な対応方針】
 """
         else:
             prompt = f"""
 あなたは19年の経験を持つベテラン理学療法士です。以下のデータを元に電子カルテと計画書を作成してください。
-
 {common_data}
-
 【条件】
 以下の構成と文字数制限を必ず遵守して出力してください。挨拶や前置きは不要です。いきなり【電子カルテ用】から出力してください。文章中での強調記号（カッコやアスタリスク等）は一切使用しないでください（指定した項目名のみ【】を使用可）。
-
 【電子カルテ用】
 ・実施した評価結果を、項目ごとに改行や箇条書きを用いて視覚的にスッキリとしたレイアウトで記載。
-・優先順位が高い問題点を３つ、改行して箇条書きで挙げます（改善が見込める、かつPT考察から導き出される視点から判断。※長くなりすぎないよう、1項目につき30文字程度で簡潔にまとめてください）。
+・優先順位が高い問題点を３つ、改行して箇条書きで挙げます（改善が見込める、かつPT考察から導き出される視点から判断。1項目につき30文字程度で簡潔に）。
 ・最後に必ず以下の期限をそのまま記載してください：
   【標準算定期限】：{std_deadline_str}
   【リハビリ期限】：{rehab_deadline_str}
-
 【計画書用】
-・【疼痛について】（20文字以内）
-・【筋力について】（20文字以内）
-・【感覚異常について】（20文字以内）
-・【可動域について】（20文字以内。疼痛を伴う制限がある場合はその旨を記載）
-・【短期目標】（100文字以内）
-・【長期目標】（50文字以内）
-・【治療方針】（120文字以内）
+・【疼痛について】
+・【筋力について】
+・【感覚異常について】
+・【可動域について】
+・【短期目標】
+・【長期目標】
+・【治療方針】
 ・【治療内容】（必要な治療プログラムを「①」「②」のような番号付き箇条書きで列挙、最大6行）
-・【参加制限に対する具体的な対応方針】（200文字以内、簡潔な「です・ます調」。文脈に合わせて適宜改行を入れ、読みやすく整理すること）
-・【機能障害に対する具体的な対応方針】（200文字以内、簡潔な「です・ます調」。文脈に合わせて適宜改行を入れ、読みやすく整理すること）
+・【参加制限に対する具体的な対応方針】
+・【機能障害に対する具体的な対応方針】
 """
 
         try:
-            with st.spinner(f"Gemini（{selected_label}）がカルテ・計画書を作成中です... 少々お待ちください！✨"):
+            with st.spinner(f"Gemini（{selected_label}）がカルテ・計画書を作成中です..."):
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel(selected_model)
                 response = model.generate_content(prompt)
-                
             st.subheader("✨ 出力結果")
             st.text_area("Copy & Paste", response.text, height=600)
         except Exception as e:
