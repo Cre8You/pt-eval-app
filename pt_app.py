@@ -227,6 +227,17 @@ st.divider()
 # --- 感覚検査 ---
 if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
     st.subheader("🪡 感覚検査（表在感覚異常など）")
+    
+    # 💡【修正】デルマトームのイラスト表示を復活させました！
+    if joint == "頸部":
+        with st.expander("📖 頸部のデルマトーム（知覚領域）を開く"):
+            try: st.image("dermatome1.jpg", width=400)
+            except: pass
+    elif joint == "腰部":
+        with st.expander("📖 腰部のデルマトーム（知覚領域）を開く"):
+            try: st.image("dermatome2.jpg", width=400)
+            except: pass
+
     st.caption("感覚異常がある領域にチェックを入れてください。")
     sensory_sides = ["右", "左"] if side == "両側" else ["正中"]
     for s in sensory_sides:
