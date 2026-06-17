@@ -76,7 +76,7 @@ JOINT_CONFIG = {
     }
 }
 
-# スペシャルテストの説明文（ツールチップ用）
+# スペシャルテストの説明文
 SPECIAL_TEST_HELP = {
     # 頸部
     "Cervical Flexion-Rotation Test": "【方法】最大屈曲位で左右に回旋させる。【陽性】回旋角度の減少や頭痛誘発（上位頸椎障害）。",
@@ -167,7 +167,6 @@ SPECIAL_TEST_HELP = {
     "モートンテスト": "【方法】足趾のMP関節を横方向から強く圧迫。【陽性】趾間などに激痛やしびれ（モートン病）。"
 }
 
-# 💡【追加】筋柔軟性テストの説明文（ツールチップ用）
 FLEXIBILITY_TEST_HELP = {
     "FFD": "【方法】立位・両膝伸展位で体幹を前屈し、中指の先端と床の距離を測定する。【意義】体幹後面およびハムストリングスの柔軟性を評価。",
     "Thomasテスト": "【方法】背臥位で健側の股・膝を胸に付くよう最大屈曲させる。【陽性】患側の大腿が床から浮き上がる（腸腰筋の短縮）。",
@@ -227,8 +226,8 @@ st.header(f"【{joint}】の評価入力")
 
 # 疼痛（NRS）
 st.subheader("⚡ 疼痛 (NRS 0-10)")
-c_nrs1, c_nrs2, c_nrs3 = st.columns(3)
-nrs_options = list(range(11))
+# 💡【修正】右側に透明な余白を追加して幅を制限
+c_nrs1, c_nrs2, c_nrs3, _ = st.columns([1, 1, 1, 3])
 with c_nrs1: nrs_rest = st.selectbox("安静時NRS", nrs_options, index=0)
 with c_nrs2: nrs_night = st.selectbox("夜間時NRS", nrs_options, index=0)
 with c_nrs3: nrs_move = st.selectbox("動作時NRS", nrs_options, index=0)
@@ -255,7 +254,8 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
     
     if is_median_item:
         if needs_ef:
-            c_val, c_pain, c_ef = st.columns([2, 1, 3])
+            # 💡【修正】右側に透明な余白を追加
+            c_val, c_pain, c_ef, _ = st.columns([1.5, 0.8, 2.5, 3])
             with c_val: rom_results["正中"][item] = st.number_input(f"【正中】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"c_{item}")
             with c_pain:
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
@@ -264,14 +264,15 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 endfeel_results["正中"][item] = st.multiselect("End-Feel", EF_OPTIONS, key=f"ef_c_{item}", label_visibility="collapsed", placeholder="EFを選択")
         else:
-            c_val, c_pain = st.columns([3, 1])
+            c_val, c_pain, _ = st.columns([1.5, 0.8, 5.7])
             with c_val: rom_results["正中"][item] = st.number_input(f"【正中】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"c_{item}")
             with c_pain:
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 rom_pain_results["正中"][item] = st.checkbox("疼痛あり", key=f"cpain_{item}")
     elif side == "両側":
         if needs_ef:
-            cr_val, cr_pain, cr_ef, cl_val, cl_pain, cl_ef = st.columns([1.5, 0.8, 2.2, 1.5, 0.8, 2.2])
+            # 💡【修正】右側に透明な余白を追加
+            cr_val, cr_pain, cr_ef, cl_val, cl_pain, cl_ef, _ = st.columns([1.5, 0.8, 2.5, 1.5, 0.8, 2.5, 1])
             if item == "内旋(結帯)":
                 opts = ["Th4-8", "Th9-12", "L1-5", "仙骨", "腸骨"]
                 with cr_val: rom_results["右"][item] = st.selectbox(f"【右】{item}", opts, index=None, key=f"r_{item}")
@@ -292,7 +293,7 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 endfeel_results["左"][item] = st.multiselect("EF", EF_OPTIONS, key=f"ef_l_{item}", label_visibility="collapsed", placeholder="左EF")
         else:
-            cr_val, cr_pain, cl_val, cl_pain = st.columns([3, 1, 3, 1])
+            cr_val, cr_pain, cl_val, cl_pain, _ = st.columns([1.5, 0.8, 1.5, 0.8, 3.4])
             if item == "内旋(結帯)":
                 opts = ["Th4-8", "Th9-12", "L1-5", "仙骨", "腸骨"]
                 with cr_val: rom_results["右"][item] = st.selectbox(f"【右】{item}", opts, index=None, key=f"r_{item}")
@@ -315,13 +316,15 @@ slr_ang_r = slr_ang_l = ffd_val = None
 
 if joint == "腰部":
     st.subheader("🧘 筋柔軟性テスト")
-    # 💡【修正】FFDの数値入力欄にツールチップ（help）を追加しました！
-    ffd_val = st.number_input("FFD (cm)", value=None, step=0.1, format="%.1f", placeholder="0.0", key="ffd_val", help=FLEXIBILITY_TEST_HELP["FFD"])
+    # 💡【修正】FFDの右側に透明な余白を追加
+    c_ffd, _ = st.columns([1, 3])
+    with c_ffd:
+        ffd_val = st.number_input("FFD (cm)", value=None, step=0.1, format="%.1f", placeholder="0.0", key="ffd_val", help=FLEXIBILITY_TEST_HELP["FFD"])
     
-    col_flex_r, col_flex_l = st.columns(2)
+    # 💡【修正】SLRの入力欄が伸びないよう右側に透明な余白を追加
+    col_flex_r, col_flex_l, _ = st.columns([1, 1, 1])
     with col_flex_r:
         st.write("『右』")
-        # 💡【修正】各テストのチェックボックスと数値入力欄にツールチップ（help）を追加しました！
         thomas_r = st.checkbox("Thomasテスト (右)", key="thomas_r", help=FLEXIBILITY_TEST_HELP["Thomasテスト"])
         ely_r = st.checkbox("Elyテスト (右)", key="ely_r", help=FLEXIBILITY_TEST_HELP["Elyテスト"])
         k_ext_r = st.checkbox("90-90膝伸展テスト (右)", key="k_ext_r", help=FLEXIBILITY_TEST_HELP["90-90膝伸展テスト"])
@@ -341,9 +344,13 @@ for item in JOINT_CONFIG[joint]["mmt"]:
     is_median_item = (joint == "腰部" and item in ["体幹屈筋群", "体幹伸筋群", "腹斜筋群"]) or (joint == "頸部" and item == "頚部伸筋群")
     
     if is_median_item:
-        mmt_results["正中"][item] = st.selectbox(f"【正中】{item}", mmt_opts, index=None, key=f"mc_{item}")
+        # 💡【修正】正中のMMTの右側に透明な余白を追加
+        c1, _ = st.columns([1, 3])
+        with c1:
+            mmt_results["正中"][item] = st.selectbox(f"【正中】{item}", mmt_opts, index=None, key=f"mc_{item}")
     elif side == "両側":
-        c1, c2 = st.columns(2)
+        # 💡【修正】左右のMMTの右側に透明な余白を追加
+        c1, c2, _ = st.columns([1, 1, 2])
         with c1: mmt_results["右"][item] = st.selectbox(f"【右】{item}", mmt_opts, index=None, key=f"mr_{item}")
         with c2: mmt_results["左"][item] = st.selectbox(f"【左】{item}", mmt_opts, index=None, key=f"ml_{item}")
 
