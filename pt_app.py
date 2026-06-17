@@ -76,7 +76,7 @@ JOINT_CONFIG = {
     }
 }
 
-# 💡【追加】スペシャルテストの説明文（ツールチップ用）
+# スペシャルテストの説明文（ツールチップ用）
 SPECIAL_TEST_HELP = {
     # 頸部
     "Cervical Flexion-Rotation Test": "【方法】最大屈曲位で左右に回旋させる。【陽性】回旋角度の減少や頭痛誘発（上位頸椎障害）。",
@@ -165,6 +165,15 @@ SPECIAL_TEST_HELP = {
     "衝突試験": "【方法】足関節を最大背屈または最大底屈させる。【陽性】関節前部または後部の疼痛（インピンジメント）。",
     "Tinelサイン(足根管)": "【方法】内果の後下方（足根管部）を叩打。【陽性】足底への放散痛やしびれ（足根管症候群）。",
     "モートンテスト": "【方法】足趾のMP関節を横方向から強く圧迫。【陽性】趾間などに激痛やしびれ（モートン病）。"
+}
+
+# 💡【追加】筋柔軟性テストの説明文（ツールチップ用）
+FLEXIBILITY_TEST_HELP = {
+    "FFD": "【方法】立位・両膝伸展位で体幹を前屈し、中指の先端と床の距離を測定する。【意義】体幹後面およびハムストリングスの柔軟性を評価。",
+    "Thomasテスト": "【方法】背臥位で健側の股・膝を胸に付くよう最大屈曲させる。【陽性】患側の大腿が床から浮き上がる（腸腰筋の短縮）。",
+    "Elyテスト": "【方法】腹臥位で他動的に膝を屈曲させる。【陽性】同側の骨盤が浮き上がり、股関節が屈曲する（大腿直筋の短縮）。",
+    "90-90膝伸展テスト": "【方法】背臥位で股・膝90度屈曲位から膝を他動伸展。【陽性】完全伸展できず20度以上の制限がある（ハムストリングスの短縮）。",
+    "SLR": "【方法】背臥位で膝を伸展したまま下肢を他動挙上する。【意義】ハムストリングスの短縮度合い、または神経根症状の有無を評価。"
 }
 
 st.title("🦴 Yudai式：AI理学療法アシスタント")
@@ -306,20 +315,23 @@ slr_ang_r = slr_ang_l = ffd_val = None
 
 if joint == "腰部":
     st.subheader("🧘 筋柔軟性テスト")
-    ffd_val = st.number_input("FFD (cm)", value=None, step=0.1, format="%.1f", placeholder="0.0", key="ffd_val")
+    # 💡【修正】FFDの数値入力欄にツールチップ（help）を追加しました！
+    ffd_val = st.number_input("FFD (cm)", value=None, step=0.1, format="%.1f", placeholder="0.0", key="ffd_val", help=FLEXIBILITY_TEST_HELP["FFD"])
+    
     col_flex_r, col_flex_l = st.columns(2)
     with col_flex_r:
         st.write("『右』")
-        thomas_r = st.checkbox("Thomasテスト (右)", key="thomas_r")
-        ely_r = st.checkbox("Elyテスト (右)", key="ely_r")
-        k_ext_r = st.checkbox("90-90膝伸展テスト (右)", key="k_ext_r")
-        slr_ang_r = st.number_input("SLR角度 (右)", value=None, step=1, format="%d", placeholder="70", key="slr_ang_r")
+        # 💡【修正】各テストのチェックボックスと数値入力欄にツールチップ（help）を追加しました！
+        thomas_r = st.checkbox("Thomasテスト (右)", key="thomas_r", help=FLEXIBILITY_TEST_HELP["Thomasテスト"])
+        ely_r = st.checkbox("Elyテスト (右)", key="ely_r", help=FLEXIBILITY_TEST_HELP["Elyテスト"])
+        k_ext_r = st.checkbox("90-90膝伸展テスト (右)", key="k_ext_r", help=FLEXIBILITY_TEST_HELP["90-90膝伸展テスト"])
+        slr_ang_r = st.number_input("SLR角度 (右)", value=None, step=1, format="%d", placeholder="70", key="slr_ang_r", help=FLEXIBILITY_TEST_HELP["SLR"])
     with col_flex_l:
         st.write("『左』")
-        thomas_l = st.checkbox("Thomasテスト (左)", key="thomas_l")
-        ely_l = st.checkbox("Elyテスト (左)", key="ely_l")
-        k_ext_l = st.checkbox("90-90膝伸展テスト (左)", key="k_ext_l")
-        slr_ang_l = st.number_input("SLR角度 (左)", value=None, step=1, format="%d", placeholder="70", key="slr_ang_l")
+        thomas_l = st.checkbox("Thomasテスト (左)", key="thomas_l", help=FLEXIBILITY_TEST_HELP["Thomasテスト"])
+        ely_l = st.checkbox("Elyテスト (左)", key="ely_l", help=FLEXIBILITY_TEST_HELP["Elyテスト"])
+        k_ext_l = st.checkbox("90-90膝伸展テスト (左)", key="k_ext_l", help=FLEXIBILITY_TEST_HELP["90-90膝伸展テスト"])
+        slr_ang_l = st.number_input("SLR角度 (左)", value=None, step=1, format="%d", placeholder="70", key="slr_ang_l", help=FLEXIBILITY_TEST_HELP["SLR"])
     st.divider()
 
 # MMT入力
@@ -360,7 +372,6 @@ if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
 
 # --- スペシャルテスト ---
 st.subheader("🧪 スペシャルテスト")
-# 💡【修正】helpパラメータにSPECIAL_TEST_HELPの内容を紐づけて、ツールチップ機能を追加しました！
 if side == "両側" and joint != "頸部":
     c_sp_r, c_sp_l = st.columns(2)
     with c_sp_r:
