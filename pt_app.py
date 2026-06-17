@@ -176,6 +176,7 @@ FLEXIBILITY_TEST_HELP = {
 }
 
 st.title("🦴 Yudai式：AI理学療法アシスタント")
+st.warning("氏名・生年月日・住所・患者IDなど、直接個人を特定できる情報は自由記載欄へ入力しないでください。")
 
 # --- サイドバー ---
 with st.sidebar:
@@ -358,12 +359,16 @@ if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
     st.subheader("🪡 感覚検査（表在感覚異常など）")
     if joint == "頸部":
         with st.expander("📖 頸部のデルマトーム（知覚領域）を開く"):
-            try: st.image("dermatome1.jpg", width=400)
-            except: pass
+            try:
+                st.image("dermatome1.jpg", width=400)
+            except Exception:
+                st.warning("デルマトーム画像を読み込めませんでした。")
     elif joint == "腰部":
         with st.expander("📖 腰部のデルマトーム（知覚領域）を開く"):
-            try: st.image("dermatome2.jpg", width=400)
-            except: pass
+            try:
+                st.image("dermatome2.jpg", width=400)
+            except Exception:
+                st.warning("デルマトーム画像を読み込めませんでした。")
     st.caption("感覚異常がある領域にチェックを入れてください。")
     sensory_sides = ["右", "左"] if side == "両側" else ["正中"]
     for s in sensory_sides:
@@ -494,6 +499,7 @@ if st.button("🚀 生成開始", use_container_width=True):
                     
         special_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in special_results[s].items() if v]
         check_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in check_results[s].items() if v]
+        sensory_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in sensory_results[s].items() if v]
         adl_str = "、".join(check_pos) if check_pos else "特記なし"
         if adl_notes: adl_str += f" / 特記：{adl_notes}"
 
@@ -533,6 +539,7 @@ if st.button("🚀 生成開始", use_container_width=True):
             common_data += f"・筋柔軟性テスト：{flexibility_str}\n"
 
         common_data += f"""・MMT（4以下）：{"、".join(mmt_list) if mmt_list else "特記なし"}
+・感覚異常：{"、".join(sensory_pos) if sensory_pos else "特記なし"}
 ・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
 ・動作/制限(ADL)：{adl_str}
 ・PT考察：{pt_observation if pt_observation else "特記なし"}
@@ -584,7 +591,14 @@ if st.button("🚀 生成開始", use_container_width=True):
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel(selected_model)
                 response = model.generate_content(prompt)
+                try:
+                    response_text = response.text
+                except Exception:
+                    response_text = None
+                if not response_text or not response_text.strip():
+                    st.error("Geminiのレスポンス本文を取得できませんでした。APIキー、モデル名、通信状況、利用上限、安全性フィルタの結果を確認してください。")
+                    st.stop()
             st.subheader("✨ 出力結果")
-            st.text_area("Copy & Paste", response.text, height=600)
+            st.text_area("Copy & Paste", response_text, height=600)
         except Exception as e:
             st.error(f"エラー: {e}")
