@@ -9,7 +9,7 @@ st.set_page_config(page_title="理学療法評価AIアシスタント", layout="
 JOINT_CONFIG = {
     "頸部": {
         "rom": {"屈曲": 60, "伸展": 50, "右側屈": 50, "左側屈": 50, "右回旋": 60, "左回旋": 60, "CV角": 50},
-        "mmt": ["頚部伸筋群", "僧帽筋上部", "肩甲挙筋", "前鋸筋", "上腕二頭筋", "上腕三頭筋", "上腕筋", "腕橈骨筋"],
+        "mmt": ["頚部伸筋群", "僧帽筋上部", "肩甲挙筋", "前鋸筋", "上腕二頭筋", "肩甲下筋", "上腕筋", "腕橈骨筋"],
         "sensory": ["C5", "C6", "C7", "C8", "Th1"],
         "special": ["Cervical Flexion-Rotation Test", "Spurlingテスト(右)", "Spurlingテスト(左)", "Jacksonテスト(右)", "Jacksonテスト(左)", "頸椎牽引テスト", "Hoffmann反射", "Trener反射", "足クローヌス", "Babisnki反射", "Adsonテスト", "Wrightテスト", "Edenテスト"],
         "check": ["前方頭位(FHP)", "胸椎後弯・肩甲骨外転位"]
@@ -22,7 +22,7 @@ JOINT_CONFIG = {
         },
         "mmt": ["体幹屈筋群", "体幹伸筋群", "腹斜筋群", "腸腰筋", "大殿筋", "中殿筋", "大腿筋膜張筋"],
         "sensory": ["L1", "L2", "L3", "L4", "L5", "S1", "S2"],
-        "special": ["SLRテスト", "Active-SLR", "FNSテスト", "Kempテスト", "Newtonテスト", "Thomasテスト", "Valsalvaテスト", "叩打痛"],
+        "special": ["Active-SLR", "FNSテスト", "Kempテスト", "Newtonテスト", "Valsalvaテスト", "叩打痛"],
         "check": ["寝返り困難", "起き上がり困難", "立ち上がり困難", "長時間の座位困難", "間欠性跛行", "体幹の側方偏移"]
     },
     "肩関節": {
@@ -209,6 +209,30 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
 
 st.divider()
 
+# 筋柔軟性テスト
+thomas_r = thomas_l = ely_r = ely_l = k_ext_r = k_ext_l = False
+slr_ang_r = slr_ang_l = ffd_val = None
+
+if joint == "腰部":
+    st.subheader("🧘 筋柔軟性テスト")
+    # 💡【修正】FFDの入力欄を最上部に追加しました
+    ffd_val = st.number_input("FFD (cm)", value=None, step=0.1, format="%.1f", placeholder="0.0", key="ffd_val")
+    
+    col_flex_r, col_flex_l = st.columns(2)
+    with col_flex_r:
+        st.write("『右』")
+        thomas_r = st.checkbox("Thomasテスト (右)", key="thomas_r")
+        ely_r = st.checkbox("Elyテスト (右)", key="ely_r")
+        k_ext_r = st.checkbox("90-90膝伸展テスト (右)", key="k_ext_r")
+        slr_ang_r = st.number_input("SLR角度 (右)", value=None, step=1, format="%d", placeholder="70", key="slr_ang_r")
+    with col_flex_l:
+        st.write("『左』")
+        thomas_l = st.checkbox("Thomasテスト (左)", key="thomas_l")
+        ely_l = st.checkbox("Elyテスト (左)", key="ely_l")
+        k_ext_l = st.checkbox("90-90膝伸展テスト (左)", key="k_ext_l")
+        slr_ang_l = st.number_input("SLR角度 (左)", value=None, step=1, format="%d", placeholder="70", key="slr_ang_l")
+    st.divider()
+
 # MMT入力
 st.subheader("💪 徒手筋力テスト (MMT)")
 mmt_opts = ["0", "1", "2", "3-", "3", "3+", "4", "5"]
@@ -227,7 +251,6 @@ st.divider()
 # --- 感覚検査 ---
 if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
     st.subheader("🪡 感覚検査（表在感覚異常など）")
-    
     if joint == "頸部":
         with st.expander("📖 頸部のデルマトーム（知覚領域）を開く"):
             try: st.image("dermatome1.jpg", width=400)
@@ -236,7 +259,6 @@ if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
         with st.expander("📖 腰部のデルマトーム（知覚領域）を開く"):
             try: st.image("dermatome2.jpg", width=400)
             except: pass
-
     st.caption("感覚異常がある領域にチェックを入れてください。")
     sensory_sides = ["右", "左"] if side == "両側" else ["正中"]
     for s in sensory_sides:
@@ -267,20 +289,28 @@ else:
 st.divider()
 
 # --- 動作観察 ---
-motion_kito = motion_slr_pronation = motion_slr_post = motion_slr_toe = motion_slr_arch = False
+motion_kito = False
+m_slr_pronation_r = m_slr_post_r = m_slr_toe_r = m_slr_arch_r = False
+m_slr_pronation_l = m_slr_post_l = m_slr_toe_l = m_slr_arch_l = False
 motion_walking = ""
 if joint in ["腰部", "股関節", "膝関節", "足関節"]:
     st.subheader("👀 動作観察 (立ち上がり・片脚立位・歩行)")
-    c_m1, c_m2 = st.columns(2)
+    c_m1, c_m2, c_m3 = st.columns(3)
     with c_m1:
         st.write("『立ち上がり』")
         motion_kito = st.checkbox("Knee-in Toe-out (KITO)")
     with c_m2:
-        st.write("『片脚立位』")
-        motion_slr_pronation = st.checkbox("足部回内")
-        motion_slr_post = st.checkbox("後方重心")
-        motion_slr_toe = st.checkbox("足趾への荷重不足")
-        motion_slr_arch = st.checkbox("内側アーチの低下")
+        st.write("『片脚立位・右』")
+        m_slr_pronation_r = st.checkbox("足部回内", key="m_slr_pronation_r")
+        m_slr_post_r = st.checkbox("後方重心", key="m_slr_post_r")
+        m_slr_toe_r = st.checkbox("足趾への荷重不足", key="m_slr_toe_r")
+        m_slr_arch_r = st.checkbox("内側アーチの低下", key="m_slr_arch_r")
+    with c_m3:
+        st.write("『片脚立位・左』")
+        m_slr_pronation_l = st.checkbox("足部回内", key="m_slr_pronation_l")
+        m_slr_post_l = st.checkbox("後方重心", key="m_slr_post_l")
+        m_slr_toe_l = st.checkbox("足趾への荷重不足", key="m_slr_toe_l")
+        m_slr_arch_l = st.checkbox("内側アーチの低下", key="m_slr_arch_l")
     motion_walking = st.text_area("『歩行』に関する観察・特記事項", height=80, placeholder="例：歩行時に股関節伸展代償としての腰椎前弯増強が見られる。")
     st.divider()
 
@@ -301,7 +331,6 @@ else:
     for i, chk in enumerate(JOINT_CONFIG[joint]["check"]):
         with c_ch[i % 3]:
             check_results["正中"][chk] = st.checkbox(f"{chk}", key=f"ch_正中_{chk}")
-
 adl_notes = st.text_area("ADLに関する特記事項（その他の詳細など）", height=80)
 
 st.divider()
@@ -364,10 +393,27 @@ if st.button("🚀 生成開始", use_container_width=True):
         if joint in ["腰部", "股関節", "膝関節", "足関節"]:
             m_parts = []
             if motion_kito: m_parts.append("立ち上がり:KITO")
-            slr_issues = [txt for cond, txt in zip([motion_slr_pronation, motion_slr_post, motion_slr_toe, motion_slr_arch], ["足部回内", "後方重心", "足趾荷重不足", "内側アーチ低下"]) if cond]
-            if slr_issues: m_parts.append("片脚立位:" + "、".join(slr_issues))
+            slr_issues_r = [txt for cond, txt in zip([m_slr_pronation_r, m_slr_post_r, m_slr_toe_r, m_slr_arch_r], ["足部回内", "後方重心", "足趾荷重不足", "内側アーチ低下"]) if cond]
+            slr_issues_l = [txt for cond, txt in zip([m_slr_pronation_l, m_slr_post_l, m_slr_toe_l, m_slr_arch_l], ["足部回内", "後方重心", "足趾荷重不足", "内側アーチ低下"]) if cond]
+            if slr_issues_r: m_parts.append("片脚立位(右):" + "、".join(slr_issues_r))
+            if slr_issues_l: m_parts.append("片脚立位(左):" + "、".join(slr_issues_l))
             if motion_walking: m_parts.append(f"歩行:{motion_walking}")
             if m_parts: motion_prompt_line = f"\n・動作観察：{'、'.join(m_parts)}"
+
+        # 💡【修正】筋柔軟性テストのデータ抽出ロジック（FFDを追加）
+        flexibility_str = ""
+        if joint == "腰部":
+            flex_items = []
+            if ffd_val is not None: flex_items.append(f"FFD({ffd_val}cm)")
+            if thomas_r: flex_items.append("Thomasテスト(右陽性)")
+            if thomas_l: flex_items.append("Thomasテスト(左陽性)")
+            if ely_r: flex_items.append("Elyテスト(右陽性)")
+            if ely_l: flex_items.append("Elyテスト(左陽性)")
+            if k_ext_r: flex_items.append("90-90膝伸展テスト(右陽性)")
+            if k_ext_l: flex_items.append("90-90膝伸展テスト(左陽性)")
+            if slr_ang_r is not None: flex_items.append(f"SLR(右{slr_ang_r}°)")
+            if slr_ang_l is not None: flex_items.append(f"SLR(左{slr_ang_l}°)")
+            flexibility_str = "、".join(flex_items) if flex_items else "特記なし"
 
         common_data = f"""
 【データ】
@@ -375,7 +421,11 @@ if st.button("🚀 生成開始", use_container_width=True):
 ・他部門からの情報：{other_dept_info if other_dept_info else "特記なし"}
 ・疼痛：{pain_str}
 ・ROM（制限あり）：{"、".join(rom_list) if rom_list else "特記なし"}{motion_prompt_line}
-・MMT（4以下）：{"、".join(mmt_list) if mmt_list else "特記なし"}
+"""
+        if joint == "腰部":
+            common_data += f"・筋柔軟性テスト：{flexibility_str}\n"
+
+        common_data += f"""・MMT（4以下）：{"、".join(mmt_list) if mmt_list else "特記なし"}
 ・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
 ・動作/制限(ADL)：{adl_str}
 ・PT考察：{pt_observation if pt_observation else "特記なし"}
@@ -422,7 +472,6 @@ if st.button("🚀 生成開始", use_container_width=True):
 ・【参加制限に対する具体的な対応方針】（200文字以内、簡潔な「です・ます調」。適宜改行を入れること。ただし、空行（空白の行）は絶対に作らず、行を詰めて出力すること）
 ・【機能障害に対する具体的な対応方針】（200文字以内、簡潔な「です・ます調」。適宜改行を入れること。ただし、空行（空白の行）は絶対に作らず、行を詰めて出力すること）
 """
-
         try:
             with st.spinner(f"Gemini（{selected_label}）がカルテ・計画書を作成中です..."):
                 genai.configure(api_key=gemini_key)
