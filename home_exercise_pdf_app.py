@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import io
 import re
 from pathlib import Path
@@ -18,6 +19,10 @@ APP_TITLE = "足部ホームエクササイズPDF出力アプリ"
 OUTPUT_FILENAME = "home_exercise_program.pdf"
 APPROVED_STATUSES = {"採用", "採用候補"}
 DISPLAY_COLUMNS = ["運動ID", "運動名", "対象部位", "カテゴリ", "回数", "注意点"]
+HEADER_SCAN_ROWS = 10
+MIN_HEADER_MATCHES = 3
+CORE_HEADER_COLUMNS = {"運動ID", "運動名", "画像URL"}
+HEADER_NOT_FOUND_MESSAGE = "運動ID、運動名、画像URLなどの見出し行が見つかりません。"
 REQUIRED_COLUMNS = [
     "運動ID",
     "運動名",
@@ -38,25 +43,73 @@ REQUIRED_COLUMNS = [
 ]
 
 
-def read_exercise_database(uploaded_file) -> pd.DataFrame:
-    suffix = Path(uploaded_file.name).suffix.lower()
-    if suffix in {".xlsx", ".xls"}:
-        return pd.read_excel(uploaded_file)
-    if suffix == ".csv":
-        file_bytes = uploaded_file.getvalue()
-        for encoding in ("utf-8-sig", "cp932"):
-            try:
-                return pd.read_csv(io.BytesIO(file_bytes), encoding=encoding)
-            except UnicodeDecodeError:
-                continue
-        return pd.read_csv(io.BytesIO(file_bytes))
-    raise ValueError("Excelファイル（.xlsx / .xls）またはCSVファイルをアップロードしてください。")
-
-
 def text_value(value) -> str:
     if pd.isna(value):
         return ""
     return str(value).strip()
+
+
+def detect_header_row(raw_df: pd.DataFrame) -> int:
+    best_index: int | None = None
+    best_matches: set[str] = set()
+
+    for row_index, row in raw_df.head(HEADER_SCAN_ROWS).iterrows():
+        row_values = {text_value(value) for value in row.tolist()}
+        matches = row_values.intersection(REQUIRED_COLUMNS)
+        if len(matches) > len(best_matches):
+            best_index = row_index
+            best_matches = matches
+
+    if (
+        best_index is None
+        or len(best_matches) < MIN_HEADER_MATCHES
+        or not CORE_HEADER_COLUMNS.issubset(best_matches)
+    ):
+        raise ValueError(HEADER_NOT_FOUND_MESSAGE)
+
+    return best_index
+
+
+def apply_detected_header(raw_df: pd.DataFrame) -> pd.DataFrame:
+    header_row_index = detect_header_row(raw_df)
+    headers = [text_value(value) for value in raw_df.iloc[header_row_index].tolist()]
+    data = raw_df.iloc[header_row_index + 1 :].copy()
+    data.columns = headers
+    data = data.loc[:, [bool(column) for column in data.columns]]
+    data = data.dropna(how="all").reset_index(drop=True)
+    return data
+
+
+def read_csv_without_header(file_bytes: bytes) -> pd.DataFrame:
+    last_error: Exception | None = None
+
+    for encoding in ("utf-8-sig", "cp932"):
+        try:
+            decoded = file_bytes.decode(encoding)
+            rows = list(csv.reader(io.StringIO(decoded)))
+        except UnicodeDecodeError as exc:
+            last_error = exc
+            continue
+
+        max_columns = max((len(row) for row in rows), default=0)
+        padded_rows = [row + [""] * (max_columns - len(row)) for row in rows]
+        return pd.DataFrame(padded_rows)
+
+    if last_error:
+        raise last_error
+    return pd.DataFrame()
+
+
+def read_exercise_database(uploaded_file) -> pd.DataFrame:
+    suffix = Path(uploaded_file.name).suffix.lower()
+    if suffix in {".xlsx", ".xls"}:
+        raw_df = pd.read_excel(uploaded_file, header=None)
+        return apply_detected_header(raw_df)
+    if suffix == ".csv":
+        file_bytes = uploaded_file.getvalue()
+        raw_df = read_csv_without_header(file_bytes)
+        return apply_detected_header(raw_df)
+    raise ValueError("Excelファイル（.xlsx / .xls）またはCSVファイルをアップロードしてください。")
 
 
 def find_missing_columns(df: pd.DataFrame) -> list[str]:
