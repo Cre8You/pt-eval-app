@@ -15,7 +15,7 @@ from reportlab.lib.pagesizes import A5, portrait
 from reportlab.pdfgen import canvas
 
 
-APP_TITLE = "足部ホームエクササイズPDF出力アプリ"
+APP_TITLE = "ホームエクササイズ出力アプリ"
 OUTPUT_FILENAME = "home_exercise_program.pdf"
 APPROVED_STATUSES = {"採用", "採用候補"}
 DISPLAY_COLUMNS = ["運動ID", "運動名", "対象部位", "カテゴリ", "回数", "注意点"]
