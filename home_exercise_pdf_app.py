@@ -5,7 +5,7 @@ import io
 import re
 from pathlib import Path
 from typing import Iterable
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 import pandas as pd
 import requests
@@ -23,6 +23,12 @@ HEADER_SCAN_ROWS = 10
 MIN_HEADER_MATCHES = 3
 CORE_HEADER_COLUMNS = {"運動ID", "運動名", "画像URL"}
 HEADER_NOT_FOUND_MESSAGE = "運動ID、運動名、画像URLなどの見出し行が見つかりません。"
+DEFAULT_SPREADSHEET_URL = (
+    "https://docs.google.com/spreadsheets/d/"
+    "1LD1MsT7hk6xyii3ORzjECeLenaYmChi1rWQ8fVOWb54/edit?usp=drivesdk"
+)
+DEFAULT_SHEET_NAME = "運動DB"
+DEFAULT_SHEET_GID = "1588738896"
 REQUIRED_COLUMNS = [
     "運動ID",
     "運動名",
@@ -110,6 +116,65 @@ def read_exercise_database(uploaded_file) -> pd.DataFrame:
         raw_df = read_csv_without_header(file_bytes)
         return apply_detected_header(raw_df)
     raise ValueError("Excelファイル（.xlsx / .xls）またはCSVファイルをアップロードしてください。")
+
+
+def extract_spreadsheet_id(spreadsheet_url: str) -> str | None:
+    spreadsheet_url = spreadsheet_url.strip()
+    if not spreadsheet_url:
+        return None
+
+    path_match = re.search(r"/spreadsheets/d/([^/]+)", spreadsheet_url)
+    if path_match:
+        return path_match.group(1)
+
+    if "/" not in spreadsheet_url and " " not in spreadsheet_url:
+        return spreadsheet_url
+
+    return None
+
+
+def build_google_sheet_csv_url(spreadsheet_url: str, sheet_name: str, gid: str) -> str:
+    spreadsheet_id = extract_spreadsheet_id(spreadsheet_url)
+    if not spreadsheet_id:
+        raise ValueError("GoogleスプレッドシートURLからIDを取得できませんでした。")
+
+    gid = gid.strip()
+    if gid:
+        return f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/export?format=csv&gid={gid}"
+
+    sheet_name = sheet_name.strip()
+    if sheet_name:
+        encoded_sheet_name = quote(sheet_name)
+        return (
+            f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/gviz/tq"
+            f"?tqx=out:csv&sheet={encoded_sheet_name}"
+        )
+
+    raise ValueError("シート名またはgidを入力してください。")
+
+
+def fetch_google_sheet_csv(spreadsheet_url: str, sheet_name: str, gid: str, timeout: int = 20) -> bytes:
+    csv_url = build_google_sheet_csv_url(spreadsheet_url, sheet_name, gid)
+
+    try:
+        response = requests.get(csv_url, timeout=timeout)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise ValueError(
+            "Googleスプレッドシートを読み込めませんでした。"
+            "共有設定が「リンクを知っている全員が閲覧可」になっているか確認してください。"
+        ) from exc
+
+    if not response.content:
+        raise ValueError("GoogleスプレッドシートからCSVデータを取得できませんでした。")
+
+    return response.content
+
+
+def read_google_sheet_database(spreadsheet_url: str, sheet_name: str, gid: str) -> pd.DataFrame:
+    file_bytes = fetch_google_sheet_csv(spreadsheet_url, sheet_name, gid)
+    raw_df = read_csv_without_header(file_bytes)
+    return apply_detected_header(raw_df)
 
 
 def find_missing_columns(df: pd.DataFrame) -> list[str]:
@@ -288,11 +353,30 @@ def render_selection_table(df: pd.DataFrame) -> pd.DataFrame:
     return display_df.iloc[selected_positions].copy()
 
 
-def main() -> None:
-    st.set_page_config(page_title=APP_TITLE, layout="wide")
-    st.title(APP_TITLE)
-    st.warning("患者を直接特定できる個人情報は入力しないでください")
-    st.caption("PTが選択した運動画像のみをPDF化します。禁忌判断や最終判断は医療者が行ってください。")
+def load_database_from_sidebar() -> pd.DataFrame | None:
+    data_source = st.sidebar.radio(
+        "読み込み元",
+        ["Googleスプレッドシート", "ファイルアップロード"],
+        index=0,
+    )
+
+    if data_source == "Googleスプレッドシート":
+        spreadsheet_url = st.sidebar.text_input(
+            "スプレッドシートURL",
+            value=DEFAULT_SPREADSHEET_URL,
+        )
+        sheet_name = st.sidebar.text_input("シート名", value=DEFAULT_SHEET_NAME)
+        gid = st.sidebar.text_input("gid", value=DEFAULT_SHEET_GID)
+
+        if not st.sidebar.button("運動DBを読み込む", type="primary"):
+            st.info("サイドバーの「運動DBを読み込む」を押してください。")
+            return None
+
+        try:
+            return read_google_sheet_database(spreadsheet_url, sheet_name, gid)
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"Googleスプレッドシートを読み込めませんでした: {exc}")
+            return None
 
     uploaded_file = st.sidebar.file_uploader(
         "運動DBファイルをアップロード",
@@ -301,12 +385,23 @@ def main() -> None:
 
     if uploaded_file is None:
         st.info("ExcelまたはCSV形式の運動DBをアップロードしてください。")
-        return
+        return None
 
     try:
-        df = read_exercise_database(uploaded_file)
+        return read_exercise_database(uploaded_file)
     except Exception as exc:  # noqa: BLE001
         st.error(f"ファイルを読み込めませんでした: {exc}")
+        return None
+
+
+def main() -> None:
+    st.set_page_config(page_title=APP_TITLE, layout="wide")
+    st.title(APP_TITLE)
+    st.warning("患者を直接特定できる個人情報は入力しないでください")
+    st.caption("PTが選択した運動画像のみをPDF化します。禁忌判断や最終判断は医療者が行ってください。")
+
+    df = load_database_from_sidebar()
+    if df is None:
         return
 
     missing_columns = find_missing_columns(df)
