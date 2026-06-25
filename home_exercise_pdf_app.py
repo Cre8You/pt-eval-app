@@ -29,6 +29,9 @@ DEFAULT_SPREADSHEET_URL = (
 )
 DEFAULT_SHEET_NAME = "運動DB"
 DEFAULT_SHEET_GID = "1588738896"
+DATABASE_SESSION_KEY = "exercise_database"
+DATABASE_SOURCE_SESSION_KEY = "exercise_database_source"
+DATABASE_PARAMS_SESSION_KEY = "exercise_database_params"
 REQUIRED_COLUMNS = [
     "運動ID",
     "運動名",
@@ -353,6 +356,29 @@ def render_selection_table(df: pd.DataFrame) -> pd.DataFrame:
     return display_df.iloc[selected_positions].copy()
 
 
+def database_params(spreadsheet_url: str, sheet_name: str, gid: str) -> tuple[str, str, str]:
+    return (spreadsheet_url.strip(), sheet_name.strip(), gid.strip())
+
+
+def store_database(df: pd.DataFrame, source: str, params: tuple[str, ...]) -> None:
+    st.session_state[DATABASE_SESSION_KEY] = df
+    st.session_state[DATABASE_SOURCE_SESSION_KEY] = source
+    st.session_state[DATABASE_PARAMS_SESSION_KEY] = params
+
+
+def get_stored_database(source: str, params: tuple[str, ...]) -> pd.DataFrame | None:
+    if st.session_state.get(DATABASE_SOURCE_SESSION_KEY) != source:
+        return None
+    if st.session_state.get(DATABASE_PARAMS_SESSION_KEY) != params:
+        return None
+
+    stored_df = st.session_state.get(DATABASE_SESSION_KEY)
+    if isinstance(stored_df, pd.DataFrame):
+        return stored_df.copy()
+
+    return None
+
+
 def load_database_from_sidebar() -> pd.DataFrame | None:
     data_source = st.sidebar.radio(
         "読み込み元",
@@ -367,16 +393,25 @@ def load_database_from_sidebar() -> pd.DataFrame | None:
         )
         sheet_name = st.sidebar.text_input("シート名", value=DEFAULT_SHEET_NAME)
         gid = st.sidebar.text_input("gid", value=DEFAULT_SHEET_GID)
+        params = database_params(spreadsheet_url, sheet_name, gid)
 
-        if not st.sidebar.button("運動DBを読み込む", type="primary"):
-            st.info("サイドバーの「運動DBを読み込む」を押してください。")
-            return None
+        if st.sidebar.button("運動DBを読み込む", type="primary"):
+            try:
+                df = read_google_sheet_database(spreadsheet_url, sheet_name, gid)
+                store_database(df, data_source, params)
+                st.sidebar.success("運動DBを読み込みました。")
+                return df.copy()
+            except Exception as exc:  # noqa: BLE001
+                st.error(f"Googleスプレッドシートを読み込めませんでした: {exc}")
+                return None
 
-        try:
-            return read_google_sheet_database(spreadsheet_url, sheet_name, gid)
-        except Exception as exc:  # noqa: BLE001
-            st.error(f"Googleスプレッドシートを読み込めませんでした: {exc}")
-            return None
+        stored_df = get_stored_database(data_source, params)
+        if stored_df is not None:
+            st.sidebar.success("運動DBを読み込み済みです。")
+            return stored_df
+
+        st.info("サイドバーの「運動DBを読み込む」を押してください。")
+        return None
 
     uploaded_file = st.sidebar.file_uploader(
         "運動DBファイルをアップロード",
@@ -387,8 +422,15 @@ def load_database_from_sidebar() -> pd.DataFrame | None:
         st.info("ExcelまたはCSV形式の運動DBをアップロードしてください。")
         return None
 
+    params = (uploaded_file.name, str(getattr(uploaded_file, "size", "")))
+    stored_df = get_stored_database(data_source, params)
+    if stored_df is not None:
+        return stored_df
+
     try:
-        return read_exercise_database(uploaded_file)
+        df = read_exercise_database(uploaded_file)
+        store_database(df, data_source, params)
+        return df.copy()
     except Exception as exc:  # noqa: BLE001
         st.error(f"ファイルを読み込めませんでした: {exc}")
         return None
