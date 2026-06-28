@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import re
 from pathlib import Path
@@ -32,6 +33,17 @@ DEFAULT_SHEET_GID = "1588738896"
 DATABASE_SESSION_KEY = "exercise_database"
 DATABASE_SOURCE_SESSION_KEY = "exercise_database_source"
 DATABASE_PARAMS_SESSION_KEY = "exercise_database_params"
+SELECTED_EXERCISE_IDS_SESSION_KEY = "selected_exercise_ids"
+FOOT_BODY_PART = "足部・足趾"
+BODY_PART_ALIASES = {
+    "足関節": FOOT_BODY_PART,
+    "足指": FOOT_BODY_PART,
+    "足趾": FOOT_BODY_PART,
+    "足部": FOOT_BODY_PART,
+    "足指・足部": FOOT_BODY_PART,
+    "足趾・足部": FOOT_BODY_PART,
+    FOOT_BODY_PART: FOOT_BODY_PART,
+}
 REQUIRED_COLUMNS = [
     "運動ID",
     "運動名",
@@ -56,6 +68,48 @@ def text_value(value) -> str:
     if pd.isna(value):
         return ""
     return str(value).strip()
+
+
+def normalize_body_part(value) -> str:
+    body_part = text_value(value)
+    return BODY_PART_ALIASES.get(body_part, body_part)
+
+
+def normalize_exercise_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    normalized_df = df.copy()
+    if "対象部位" in normalized_df.columns:
+        normalized_df["対象部位"] = normalized_df["対象部位"].map(normalize_body_part)
+    return normalized_df
+
+
+def get_selected_exercise_ids() -> set[str]:
+    selected_ids = st.session_state.get(SELECTED_EXERCISE_IDS_SESSION_KEY, set())
+    if not isinstance(selected_ids, set):
+        selected_ids = set(selected_ids)
+    return {text_value(exercise_id) for exercise_id in selected_ids if text_value(exercise_id)}
+
+
+def store_selected_exercise_ids(selected_ids: set[str]) -> None:
+    st.session_state[SELECTED_EXERCISE_IDS_SESSION_KEY] = {
+        text_value(exercise_id) for exercise_id in selected_ids if text_value(exercise_id)
+    }
+
+
+def selected_rows_from_ids(df: pd.DataFrame, selected_ids: set[str]) -> pd.DataFrame:
+    if not selected_ids:
+        return df.iloc[0:0].copy()
+    return df[df["運動ID"].map(text_value).isin(selected_ids)].copy()
+
+
+def prune_selected_exercise_ids(df: pd.DataFrame) -> None:
+    valid_ids = {text_value(exercise_id) for exercise_id in df["運動ID"].dropna()}
+    store_selected_exercise_ids(get_selected_exercise_ids().intersection(valid_ids))
+
+
+def selection_table_key(display_df: pd.DataFrame) -> str:
+    exercise_ids = "|".join(display_df["運動ID"].map(text_value).tolist())
+    digest = hashlib.md5(exercise_ids.encode("utf-8")).hexdigest()
+    return f"exercise_selection_table_{digest}"
 
 
 def detect_header_row(raw_df: pd.DataFrame) -> int:
@@ -206,7 +260,7 @@ def apply_filters(
     filtered = df.copy()
 
     if body_part != "すべて":
-        filtered = filtered[filtered["対象部位"].map(text_value) == body_part]
+        filtered = filtered[filtered["対象部位"].map(normalize_body_part) == body_part]
     if category != "すべて":
         filtered = filtered[filtered["カテゴリ"].map(text_value) == category]
     if loading_condition != "すべて":
@@ -332,16 +386,18 @@ def render_filters(df: pd.DataFrame) -> pd.DataFrame:
     return apply_filters(df, body_part, category, loading_condition, disease_keyword)
 
 
-def render_selection_table(df: pd.DataFrame) -> pd.DataFrame:
+def render_selection_table(filtered_df: pd.DataFrame, all_df: pd.DataFrame) -> pd.DataFrame:
     st.subheader("運動一覧")
 
-    if df.empty:
-        st.info("条件に一致する運動はありません。")
-        return df.iloc[0:0]
+    selected_ids = get_selected_exercise_ids()
 
-    display_df = df.reset_index(drop=True)
+    if filtered_df.empty:
+        st.info("条件に一致する運動はありません。")
+        return selected_rows_from_ids(all_df, selected_ids)
+
+    display_df = filtered_df.reset_index(drop=True)
     table = display_df[DISPLAY_COLUMNS].copy()
-    table.insert(0, "選択", False)
+    table.insert(0, "選択", table["運動ID"].map(text_value).isin(selected_ids))
 
     edited_table = st.data_editor(
         table,
@@ -349,11 +405,15 @@ def render_selection_table(df: pd.DataFrame) -> pd.DataFrame:
         use_container_width=True,
         column_config={"選択": st.column_config.CheckboxColumn("選択", default=False)},
         disabled=DISPLAY_COLUMNS,
-        key="exercise_selection_table",
+        key=selection_table_key(display_df),
     )
 
-    selected_positions = edited_table.index[edited_table["選択"]].tolist()
-    return display_df.iloc[selected_positions].copy()
+    visible_ids = set(display_df["運動ID"].map(text_value).tolist())
+    checked_ids = set(edited_table.loc[edited_table["選択"], "運動ID"].map(text_value).tolist())
+    updated_selected_ids = selected_ids.difference(visible_ids).union(checked_ids)
+    store_selected_exercise_ids(updated_selected_ids)
+
+    return selected_rows_from_ids(all_df, updated_selected_ids)
 
 
 def database_params(spreadsheet_url: str, sheet_name: str, gid: str) -> tuple[str, str, str]:
@@ -452,11 +512,13 @@ def main() -> None:
         st.write(missing_columns)
         return
 
+    df = normalize_exercise_dataframe(df)
     approved_df = filter_by_approval(df)
+    prune_selected_exercise_ids(approved_df)
     st.caption(f"読み込み件数: {len(df)}件 / 表示対象: {len(approved_df)}件")
 
     filtered_df = render_filters(approved_df)
-    selected_df = render_selection_table(filtered_df)
+    selected_df = render_selection_table(filtered_df, approved_df)
     st.metric("選択された運動数", len(selected_df))
 
     if st.button("PDFを作成", type="primary", disabled=selected_df.empty):
