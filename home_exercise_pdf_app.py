@@ -35,7 +35,11 @@ DATABASE_SOURCE_SESSION_KEY = "exercise_database_source"
 DATABASE_PARAMS_SESSION_KEY = "exercise_database_params"
 SELECTED_EXERCISE_IDS_SESSION_KEY = "selected_exercise_ids"
 FOOT_BODY_PART = "足部・足趾"
+BODY_PART_ORDER = ["頸部", "肩", "腰", "股関節", "膝", FOOT_BODY_PART]
+BODY_PART_ORDER_INDEX = {body_part: index for index, body_part in enumerate(BODY_PART_ORDER)}
 BODY_PART_ALIASES = {
+    "首": "頸部",
+    "頚部": "頸部",
     "足関節": FOOT_BODY_PART,
     "足指": FOOT_BODY_PART,
     "足趾": FOOT_BODY_PART,
@@ -246,8 +250,13 @@ def filter_by_approval(df: pd.DataFrame) -> pd.DataFrame:
 def unique_options(df: pd.DataFrame, column: str) -> list[str]:
     if column not in df.columns:
         return []
-    values = sorted({text_value(value) for value in df[column].dropna() if text_value(value)})
-    return values
+
+    if column == "対象部位":
+        values = {normalize_body_part(value) for value in df[column].dropna() if text_value(value)}
+        return sorted(values, key=lambda value: (BODY_PART_ORDER_INDEX.get(value, len(BODY_PART_ORDER)), value))
+
+    values = {text_value(value) for value in df[column].dropna() if text_value(value)}
+    return sorted(values)
 
 
 def apply_filters(
