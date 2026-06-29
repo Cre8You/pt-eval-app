@@ -176,7 +176,11 @@ FLEXIBILITY_TEST_HELP = {
 }
 
 st.title("🦴 Yudai式：AI理学療法アシスタント")
-st.warning("氏名・生年月日・住所・患者IDなど、直接個人を特定できる情報は自由記載欄へ入力しないでください。")
+st.warning(
+    "患者氏名、住所、電話番号、生年月日、保険証情報などの個人情報は入力しないでください。\n\n"
+    "患者IDは院内確認用であり、Geminiへのプロンプトには送信されません。\n\n"
+    "自由記載欄にも、個人を特定できる情報を入力しないでください。"
+)
 
 # --- サイドバー ---
 with st.sidebar:
@@ -460,9 +464,20 @@ pt_observation = st.text_area("PTの臨床推論・原因の仮説", height=120)
 
 st.divider()
 
+# Gemini送信前の個人情報確認
+privacy_confirmed = st.checkbox(
+    "Geminiへ送信する内容に、患者氏名・住所・電話番号・生年月日などの"
+    "個人情報が含まれていないことを確認しました"
+)
+
 # 実行ボタン
 if st.button("🚀 生成開始", use_container_width=True):
-    if not gemini_key:
+    if not privacy_confirmed:
+        st.warning(
+            "Geminiへ送信する前に、入力内容に個人情報が含まれていないことを"
+            "確認し、チェックを入れてください。"
+        )
+    elif not gemini_key:
         st.error("APIキーを入力してください")
     else:
         std_deadline = onset_date + datetime.timedelta(days=149)
@@ -599,6 +614,10 @@ if st.button("🚀 生成開始", use_container_width=True):
                     st.error("Geminiのレスポンス本文を取得できませんでした。APIキー、モデル名、通信状況、利用上限、安全性フィルタの結果を確認してください。")
                     st.stop()
             st.subheader("✨ 出力結果")
+            st.warning(
+                "AI生成文は下書きです。必ず医療者が内容を確認・修正してから使用してください。\n\n"
+                "診断や治療方針の最終判断は、医師・担当医療者が行ってください。"
+            )
             st.text_area("Copy & Paste", response_text, height=600)
         except Exception as e:
             st.error(f"エラー: {e}")
