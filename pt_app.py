@@ -1,6 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 import datetime
+import re
 
 # ページ設定
 st.set_page_config(page_title="理学療法評価AIアシスタント", layout="wide")
@@ -174,6 +175,55 @@ FLEXIBILITY_TEST_HELP = {
     "90-90膝伸展テスト": "【方法】背臥位で股・膝90度屈曲位から膝を他動伸展。【陽性】完全伸展できず20度以上の制限がある（ハムストリングスの短縮）。",
     "SLR": "【方法】背臥位で膝を伸展したまま下肢を他動挙上する。【意義】ハムストリングスの短縮度合い、または神経根症状の有無を評価。"
 }
+
+PRIVACY_PATTERNS = {
+    "電話番号": re.compile(
+        r"(?<!\d)(?:\+81|0)[-\s]?\d{1,4}[-ー‐−\s]?\d{1,4}[-ー‐−\s]?\d{3,4}(?!\d)"
+    ),
+    "メールアドレス": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
+    "生年月日の可能性がある日付": re.compile(
+        r"(?:生年月日|誕生日|DOB|birth(?:day)?|バースデー)\s*(?:は|[:：])?\s*"
+        r"(?:(?:19|20)\d{2}[年/.\-]\s*\d{1,2}[月/.\-]\s*\d{1,2}日?"
+        r"|(?:明治|大正|昭和|平成|令和)\s*\d{1,2}年\s*\d{1,2}月\s*\d{1,2}日)",
+        re.IGNORECASE,
+    ),
+    "住所の可能性がある表記": re.compile(
+        r"(?:(?:東京都|北海道|(?:大阪|京都)府|[一-鿿]{2,3}県).{0,30}(?:市|区|郡|町|村)|丁目|番地)"
+    ),
+    "個人名の可能性がある表記": re.compile(
+        r"(?:氏名|患者名|名前|お名前)\s*[:：]?\s*[一-鿿々ぁ-んァ-ヶー・　]{2,20}"
+    ),
+}
+
+
+def detect_potential_personal_information(text_fields):
+    findings = []
+    for field_name, value in text_fields.items():
+        text = str(value or "")
+        for finding_name, pattern in PRIVACY_PATTERNS.items():
+            if pattern.search(text):
+                findings.append(f"{field_name}（{finding_name}）")
+    return findings
+
+
+def format_measurement_value(value):
+    return str(int(value)) if isinstance(value, (int, float)) else str(value)
+
+
+def summarize_items(items, limit=8):
+    if not items:
+        return "特記なし"
+    summary = "、".join(items[:limit])
+    if len(items) > limit:
+        summary += f"、ほか{len(items) - limit}件"
+    return summary
+
+
+def summarize_free_text(value, limit=120):
+    text = " ".join(str(value or "").split())
+    if not text:
+        return "特記なし"
+    return text if len(text) <= limit else f"{text[:limit]}…"
 
 st.title("🦴 Yudai式：AI理学療法アシスタント")
 st.warning(
@@ -464,6 +514,68 @@ pt_observation = st.text_area("PTの臨床推論・原因の仮説", height=120)
 
 st.divider()
 
+# Gemini送信内容の要約プレビュー
+preview_rom_items = []
+for item, ref in JOINT_CONFIG[joint]["rom"].items():
+    for s in sides_to_eval:
+        value = rom_results[s].get(item)
+        if value is None:
+            continue
+        if isinstance(value, (int, float)) and isinstance(ref, (int, float)) and abs(value - ref) < 5:
+            continue
+        pain_label = "（疼痛あり）" if rom_pain_results[s].get(item) else ""
+        preview_rom_items.append(f"{item}({s}{format_measurement_value(value)}{pain_label})")
+
+preview_mmt_items = [
+    f"{item}({s}{value})"
+    for item in JOINT_CONFIG[joint]["mmt"]
+    for s in sides_to_eval
+    if (value := mmt_results[s].get(item)) is not None and value != "5"
+]
+preview_special_items = [
+    f"{test}" if s == "正中" else f"{test}({s})"
+    for s in sides_to_eval
+    for test, is_positive in special_results[s].items()
+    if is_positive
+]
+preview_adl_items = [
+    f"{item}" if s == "正中" else f"{item}({s})"
+    for s in sides_to_eval
+    for item, is_limited in check_results[s].items()
+    if is_limited
+]
+
+with st.expander("📋 Geminiへ送信する内容の要約を確認", expanded=True):
+    st.markdown(
+        f"""
+- **病名 / 評価部位**: {diagnosis} / {joint}
+- **疼痛**: 安静時{nrs_rest}、夜間時{nrs_night}、動作時{nrs_move}、特記：{summarize_free_text(pain_notes)}
+- **ROM異常**: {summarize_items(preview_rom_items)}
+- **MMT低下**: {summarize_items(preview_mmt_items)}
+- **陽性テスト**: {summarize_items(preview_special_items)}
+- **ADL制限**: {summarize_items(preview_adl_items)} / 特記：{summarize_free_text(adl_notes)}
+- **他部門情報**: {summarize_free_text(other_dept_info)}
+- **PT考察**: {summarize_free_text(pt_observation)}
+- **先月から今月の変化**: {summarize_free_text(patient_change)}
+"""
+    )
+
+privacy_scan_fields = {
+    "病名": diagnosis,
+    "疼痛の特記事項": pain_notes,
+    "歩行の特記事項": motion_walking,
+    "ADLの特記事項": adl_notes,
+    "他部門からの情報": other_dept_info,
+    "PT考察": pt_observation,
+    "先月から今月の変化": patient_change,
+}
+privacy_findings = detect_potential_personal_information(privacy_scan_fields)
+if privacy_findings:
+    st.warning(
+        "個人情報の可能性がある文字列を検知しました。内容を確認してください。\n\n"
+        f"検知箇所: {', '.join(privacy_findings)}"
+    )
+
 # Gemini送信前の個人情報確認
 privacy_confirmed = st.checkbox(
     "Geminiへ送信する内容に、患者氏名・住所・電話番号・生年月日などの"
@@ -472,7 +584,9 @@ privacy_confirmed = st.checkbox(
 
 # 実行ボタン
 if st.button("🚀 生成開始", use_container_width=True):
-    if not privacy_confirmed:
+    if privacy_findings:
+        st.warning("個人情報の可能性がある文字列を検知しました。内容を確認してください。")
+    elif not privacy_confirmed:
         st.warning(
             "Geminiへ送信する前に、入力内容に個人情報が含まれていないことを"
             "確認し、チェックを入れてください。"
@@ -488,8 +602,6 @@ if st.button("🚀 生成開始", use_container_width=True):
         pain_str = f"安静時{nrs_rest}, 夜間時{nrs_night}, 動作時{nrs_move}"
         if pain_notes: pain_str += f"（特記：{pain_notes}）"
 
-        def fmt_val(v): return str(int(v)) if isinstance(v, (int, float)) else str(v)
-
         rom_list = []
         for item in JOINT_CONFIG[joint]["rom"]:
             ref = JOINT_CONFIG[joint]["rom"][item]
@@ -503,7 +615,7 @@ if st.button("🚀 生成開始", use_container_width=True):
                     ef_str = ""
                     if needs_ef and endfeel_results[s].get(item):
                         ef_str = f"[{'・'.join(endfeel_results[s][item])}]"
-                    rom_list.append(f"{item}({s}{fmt_val(val)}{p}{ef_str})")
+                    rom_list.append(f"{item}({s}{format_measurement_value(val)}{p}{ef_str})")
         
         mmt_list = []
         for item in JOINT_CONFIG[joint]["mmt"]:
