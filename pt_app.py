@@ -195,6 +195,26 @@ PRIVACY_PATTERNS = {
     ),
 }
 
+INITIAL_OUTPUT_REQUIREMENTS = {
+    "評価結果": ("電子カルテ用", "評価結果"),
+    "問題点": ("問題点", "優先順位"),
+    "短期目標": ("短期目標",),
+    "長期目標": ("長期目標",),
+    "治療方針": ("治療方針",),
+    "治療内容": ("治療内容",),
+}
+
+REEVALUATION_OUTPUT_REQUIREMENTS = {
+    "先月から今月の変化": ("疼痛について", "筋力について", "感覚異常について", "可動域について"),
+    "現在の問題点": ("参加制限", "機能障害"),
+    "今後の方針": ("治療方針", "対応方針"),
+    "目標": ("短期目標", "長期目標"),
+    "治療内容": ("治療内容", "治療方針", "対応方針"),
+}
+
+OUTPUT_MIN_LENGTH = 300
+OUTPUT_MAX_LENGTH = 5000
+
 
 def detect_potential_personal_information(text_fields):
     findings = []
@@ -224,6 +244,17 @@ def summarize_free_text(value, limit=120):
     if not text:
         return "特記なし"
     return text if len(text) <= limit else f"{text[:limit]}…"
+
+
+def validate_ai_output(response_text, is_reevaluation):
+    requirements = REEVALUATION_OUTPUT_REQUIREMENTS if is_reevaluation else INITIAL_OUTPUT_REQUIREMENTS
+    missing_items = [
+        item_name
+        for item_name, markers in requirements.items()
+        if not any(marker in response_text for marker in markers)
+    ]
+    output_length = len(response_text.strip())
+    return missing_items, output_length < OUTPUT_MIN_LENGTH, output_length > OUTPUT_MAX_LENGTH
 
 st.title("🦴 Yudai式：AI理学療法アシスタント")
 st.warning(
@@ -725,11 +756,25 @@ if st.button("🚀 生成開始", use_container_width=True):
                 if not response_text or not response_text.strip():
                     st.error("Geminiのレスポンス本文を取得できませんでした。APIキー、モデル名、通信状況、利用上限、安全性フィルタの結果を確認してください。")
                     st.stop()
+            missing_items, output_too_short, output_too_long = validate_ai_output(
+                response_text,
+                is_reevaluation=bool(patient_change),
+            )
             st.subheader("✨ 出力結果")
             st.warning(
                 "AI生成文は下書きです。必ず医療者が内容を確認・修正してから使用してください。\n\n"
                 "診断や治療方針の最終判断は、医師・担当医療者が行ってください。"
             )
+            if missing_items:
+                st.warning(
+                    "AI出力に不足している可能性がある項目があります。"
+                    "医療者が内容を確認してください。\n\n"
+                    f"不足候補: {', '.join(missing_items)}"
+                )
+            if output_too_short:
+                st.warning(f"出力が短すぎる可能性があります。（{len(response_text.strip())}文字）")
+            if output_too_long:
+                st.warning(f"出力が長すぎる可能性があります。（{len(response_text.strip())}文字）")
             st.text_area("Copy & Paste", response_text, height=600)
         except Exception as e:
             st.error(f"エラー: {e}")
