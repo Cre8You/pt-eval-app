@@ -256,6 +256,81 @@ def validate_ai_output(response_text, is_reevaluation):
     output_length = len(response_text.strip())
     return missing_items, output_length < OUTPUT_MIN_LENGTH, output_length > OUTPUT_MAX_LENGTH
 
+
+def classify_gemini_error(error):
+    error_type = type(error).__name__.lower()
+    error_message = str(error).lower()
+    status_values = []
+    for attribute_name in ("code", "status_code"):
+        value = getattr(error, attribute_name, None)
+        if callable(value):
+            try:
+                value = value()
+            except Exception:
+                value = None
+        if value is not None:
+            status_values.append(str(value).lower())
+    signature = " ".join([error_type, error_message, *status_values])
+
+    if any(
+        marker in signature
+        for marker in (
+            "api key not valid",
+            "api_key_invalid",
+            "unauthenticated",
+            "authentication",
+            "permissiondenied",
+            "permission denied",
+            "401",
+            "403",
+        )
+    ):
+        return (
+            "error",
+            "Gemini APIの認証に失敗した可能性があります。"
+            "APIキーが正しいか、無効化されていないかを確認してください。",
+        )
+    if any(marker in signature for marker in ("resourceexhausted", "rate limit", "quota", "429", "too many requests")):
+        return (
+            "warning",
+            "Gemini APIの利用上限、レート制限、またはQuotaを超過した可能性があります。"
+            "時間をおいて再試行し、利用状況を確認してください。",
+        )
+    if any(
+        marker in signature
+        for marker in ("deadlineexceeded", "timeout", "timed out", "connection", "network", "serviceunavailable", "unavailable", "503", "dns")
+    ):
+        return (
+            "warning",
+            "Gemini APIとの通信に失敗、またはタイムアウトした可能性があります。"
+            "ネットワーク状態を確認し、しばらく後に再試行してください。",
+        )
+    if any(marker in signature for marker in ("notfound", "not found", "invalidargument", "badrequest", "404")):
+        return (
+            "error",
+            "選択したGeminiモデル名またはリクエスト設定が無効であるか、"
+            "このAPIキーで利用できない可能性があります。モデル設定を確認してください。",
+        )
+    return (
+        "error",
+        "Gemini APIの呼び出し中に予期しないエラーが発生しました。"
+        "入力内容とモデル設定を確認し、しばらく後に再試行してください。",
+    )
+
+
+def response_may_be_blocked_by_safety(response):
+    try:
+        safety_values = []
+        prompt_feedback = getattr(response, "prompt_feedback", None)
+        if prompt_feedback is not None:
+            safety_values.append(getattr(prompt_feedback, "block_reason", ""))
+        for candidate in getattr(response, "candidates", None) or []:
+            safety_values.append(getattr(candidate, "finish_reason", ""))
+    except Exception:
+        return False
+    safety_summary = " ".join(str(value).upper() for value in safety_values)
+    return any(marker in safety_summary for marker in ("SAFETY", "PROHIBITED", "BLOCKLIST", "RECITATION", "SPII"))
+
 st.title("🦴 Yudai式：AI理学療法アシスタント")
 st.warning(
     "患者氏名、住所、電話番号、生年月日、保険証情報などの個人情報は入力しないでください。\n\n"
@@ -623,7 +698,7 @@ if st.button("🚀 生成開始", use_container_width=True):
             "確認し、チェックを入れてください。"
         )
     elif not gemini_key:
-        st.error("APIキーを入力してください")
+        st.error("Gemini APIキーが未入力です。サイドバーからAPIキーを入力してください。")
     else:
         std_deadline = onset_date + datetime.timedelta(days=149)
         rehab_deadline = rehab_start_date + datetime.timedelta(days=149)
@@ -749,32 +824,49 @@ if st.button("🚀 生成開始", use_container_width=True):
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel(selected_model)
                 response = model.generate_content(prompt)
-                try:
-                    response_text = response.text
-                except Exception:
-                    response_text = None
-                if not response_text or not response_text.strip():
-                    st.error("Geminiのレスポンス本文を取得できませんでした。APIキー、モデル名、通信状況、利用上限、安全性フィルタの結果を確認してください。")
-                    st.stop()
-            missing_items, output_too_short, output_too_long = validate_ai_output(
-                response_text,
-                is_reevaluation=bool(patient_change),
-            )
-            st.subheader("✨ 出力結果")
-            st.warning(
-                "AI生成文は下書きです。必ず医療者が内容を確認・修正してから使用してください。\n\n"
-                "診断や治療方針の最終判断は、医師・担当医療者が行ってください。"
-            )
-            if missing_items:
+        except Exception as error:
+            message_level, safe_message = classify_gemini_error(error)
+            if message_level == "warning":
+                st.warning(safe_message)
+            else:
+                st.error(safe_message)
+            st.stop()
+
+        try:
+            response_text = response.text
+        except Exception:
+            response_text = None
+
+        if not response_text or not response_text.strip():
+            if response_may_be_blocked_by_safety(response):
                 st.warning(
-                    "AI出力に不足している可能性がある項目があります。"
-                    "医療者が内容を確認してください。\n\n"
-                    f"不足候補: {', '.join(missing_items)}"
+                    "Geminiの安全性フィルタなどにより、レスポンス本文が返されなかった可能性があります。"
+                    "個人情報や不適切な表現が含まれていないか、入力内容を確認してください。"
                 )
-            if output_too_short:
-                st.warning(f"出力が短すぎる可能性があります。（{len(response_text.strip())}文字）")
-            if output_too_long:
-                st.warning(f"出力が長すぎる可能性があります。（{len(response_text.strip())}文字）")
-            st.text_area("Copy & Paste", response_text, height=600)
-        except Exception as e:
-            st.error(f"エラー: {e}")
+            else:
+                st.error(
+                    "Geminiのレスポンス本文を取得できませんでした。"
+                    "モデル名、利用上限、安全性フィルタ、通信状況を確認してください。"
+                )
+            st.stop()
+
+        missing_items, output_too_short, output_too_long = validate_ai_output(
+            response_text,
+            is_reevaluation=bool(patient_change),
+        )
+        st.subheader("✨ 出力結果")
+        st.warning(
+            "AI生成文は下書きです。必ず医療者が内容を確認・修正してから使用してください。\n\n"
+            "診断や治療方針の最終判断は、医師・担当医療者が行ってください。"
+        )
+        if missing_items:
+            st.warning(
+                "AI出力に不足している可能性がある項目があります。"
+                "医療者が内容を確認してください。\n\n"
+                f"不足候補: {', '.join(missing_items)}"
+            )
+        if output_too_short:
+            st.warning(f"出力が短すぎる可能性があります。（{len(response_text.strip())}文字）")
+        if output_too_long:
+            st.warning(f"出力が長すぎる可能性があります。（{len(response_text.strip())}文字）")
+        st.text_area("Copy & Paste", response_text, height=600)
