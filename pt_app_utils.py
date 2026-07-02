@@ -66,6 +66,7 @@ def format_grip_strength_items(right_strength, left_strength):
 
 
 def calculate_laxity_score(bilateral_results, single_results):
+    """Calculate the seven-point generalized joint laxity score."""
     bilateral_score = sum(
         0.5
         for side_results in bilateral_results.values()
@@ -73,7 +74,7 @@ def calculate_laxity_score(bilateral_results, single_results):
         if is_positive
     )
     single_score = sum(1.0 for is_positive in single_results.values() if is_positive)
-    return bilateral_score + single_score
+    return min(bilateral_score + single_score, LAXITY_MAX_SCORE)
 
 
 def summarize_items(items, limit=8):
