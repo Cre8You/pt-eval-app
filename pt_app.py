@@ -193,10 +193,21 @@ LAXITY_BILATERAL_TESTS = {
     "膝関節": "膝過伸展10°以上",
     "足関節": "足関節背屈45°以上",
 }
+LAXITY_BILATERAL_KEYS = {
+    "手関節": "wrist",
+    "肘関節": "elbow",
+    "肩関節": "shoulder",
+    "膝関節": "knee",
+    "足関節": "ankle",
+}
 
 LAXITY_SINGLE_TESTS = {
     "脊柱": "立位体前屈で手掌全体が床につく",
     "股関節": "立位で股関節を外旋し、足先が180°以上開く",
+}
+LAXITY_SINGLE_KEYS = {
+    "脊柱": "spine",
+    "股関節": "hip",
 }
 
 GRIP_STRENGTH_JOINTS = {"頸部", "手関節", "手指"}
@@ -346,25 +357,48 @@ st.divider()
 st.subheader("🧬 関節弛緩性テスト")
 st.caption("東大式全身関節弛緩性テスト（7点満点）")
 
+st.markdown("#### 左右評価項目")
+st.caption("該当する側にチェックしてください。片側につき0.5点です。")
+description_header, right_header, left_header = st.columns([5, 1, 1])
+with description_header:
+    st.markdown("**判定基準**")
+with right_header:
+    st.markdown("**右**")
+with left_header:
+    st.markdown("**左**")
+
 laxity_bilateral_results = {}
-for index, (item, criterion) in enumerate(LAXITY_BILATERAL_TESTS.items()):
-    description_column, right_column, left_column, _ = st.columns([3, 1, 1, 2])
+for item, criterion in LAXITY_BILATERAL_TESTS.items():
+    item_key = LAXITY_BILATERAL_KEYS[item]
+    description_column, right_column, left_column = st.columns([5, 1, 1])
     with description_column:
         st.markdown(f"**{item}**：{criterion}")
     with right_column:
-        right_positive = st.checkbox("右", key=f"laxity_bilateral_{index}_right")
+        right_positive = st.checkbox(
+            f"{item} 右：該当する",
+            key=f"laxity_bilateral_{item_key}_right",
+            label_visibility="collapsed",
+        )
     with left_column:
-        left_positive = st.checkbox("左", key=f"laxity_bilateral_{index}_left")
+        left_positive = st.checkbox(
+            f"{item} 左：該当する",
+            key=f"laxity_bilateral_{item_key}_left",
+            label_visibility="collapsed",
+        )
     laxity_bilateral_results[item] = {"右": right_positive, "左": left_positive}
 
+st.markdown("#### 単独評価項目")
+st.caption("脊柱と股関節は、それぞれ陽性で1点です。")
 laxity_single_results = {}
-single_columns = st.columns(2)
 for index, (item, criterion) in enumerate(LAXITY_SINGLE_TESTS.items()):
-    with single_columns[index]:
-        laxity_single_results[item] = st.checkbox(
-            f"{item}：{criterion}",
-            key=f"laxity_single_{index}",
-        )
+    item_key = LAXITY_SINGLE_KEYS[item]
+    st.markdown(f"**{item}**：{criterion}")
+    laxity_single_results[item] = st.checkbox(
+        "該当する",
+        key=f"laxity_single_{item_key}",
+    )
+    if index < len(LAXITY_SINGLE_TESTS) - 1:
+        st.write("")
 
 laxity_score = calculate_laxity_score(laxity_bilateral_results, laxity_single_results)
 laxity_positive_items = []
