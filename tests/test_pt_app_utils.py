@@ -46,13 +46,24 @@ class OutputValidationTests(unittest.TestCase):
 
 
 class LaxityScoreTests(unittest.TestCase):
-    def test_calculates_partial_laxity_score(self):
-        bilateral_results = {
-            "手関節": {"右": True, "左": False},
-            "肘関節": {"右": True, "左": True},
-        }
-        single_results = {"脊柱": True, "股関節": False}
-        self.assertEqual(calculate_laxity_score(bilateral_results, single_results), 2.5)
+    def test_no_positive_findings_score_zero(self):
+        bilateral_results = {"手関節": {"右": False, "左": False}}
+        single_results = {"脊柱": False, "股関節": False}
+        self.assertEqual(calculate_laxity_score(bilateral_results, single_results), 0.0)
+
+    def test_unilateral_positive_scores_half_point(self):
+        bilateral_results = {"手関節": {"右": True, "左": False}}
+        self.assertEqual(calculate_laxity_score(bilateral_results, {}), 0.5)
+
+    def test_bilateral_positive_scores_one_point(self):
+        bilateral_results = {"手関節": {"右": True, "左": True}}
+        self.assertEqual(calculate_laxity_score(bilateral_results, {}), 1.0)
+
+    def test_spine_and_hip_score_one_point_each(self):
+        with self.subTest(item="脊柱"):
+            self.assertEqual(calculate_laxity_score({}, {"脊柱": True, "股関節": False}), 1.0)
+        with self.subTest(item="股関節"):
+            self.assertEqual(calculate_laxity_score({}, {"脊柱": False, "股関節": True}), 1.0)
 
     def test_laxity_score_has_seven_point_maximum(self):
         bilateral_results = {
@@ -61,6 +72,11 @@ class LaxityScoreTests(unittest.TestCase):
         }
         single_results = {"脊柱": True, "股関節": True}
         self.assertEqual(calculate_laxity_score(bilateral_results, single_results), LAXITY_MAX_SCORE)
+
+    def test_calculate_laxity_score_is_importable(self):
+        from pt_app_utils import calculate_laxity_score as imported_function
+
+        self.assertIs(imported_function, calculate_laxity_score)
 
 
 class GripStrengthFormattingTests(unittest.TestCase):
