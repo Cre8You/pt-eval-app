@@ -39,6 +39,7 @@ REEVALUATION_OUTPUT_REQUIREMENTS = {
 
 OUTPUT_MIN_LENGTH = 300
 OUTPUT_MAX_LENGTH = 5000
+LAXITY_MAX_SCORE = 7.0
 
 
 def detect_potential_personal_information(text_fields):
@@ -53,6 +54,26 @@ def detect_potential_personal_information(text_fields):
 
 def format_measurement_value(value):
     return str(int(value)) if isinstance(value, (int, float)) else str(value)
+
+
+def format_grip_strength_items(right_strength, left_strength):
+    items = []
+    if right_strength is not None:
+        items.append(f"右 {right_strength:.1f}kg")
+    if left_strength is not None:
+        items.append(f"左 {left_strength:.1f}kg")
+    return items
+
+
+def calculate_laxity_score(bilateral_results, single_results):
+    bilateral_score = sum(
+        0.5
+        for side_results in bilateral_results.values()
+        for is_positive in side_results.values()
+        if is_positive
+    )
+    single_score = sum(1.0 for is_positive in single_results.values() if is_positive)
+    return bilateral_score + single_score
 
 
 def summarize_items(items, limit=8):

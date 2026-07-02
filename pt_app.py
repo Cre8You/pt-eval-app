@@ -3,8 +3,11 @@ import google.generativeai as genai
 import datetime
 
 from pt_app_utils import classify_gemini_error
+from pt_app_utils import calculate_laxity_score
 from pt_app_utils import detect_potential_personal_information
+from pt_app_utils import format_grip_strength_items
 from pt_app_utils import format_measurement_value
+from pt_app_utils import LAXITY_MAX_SCORE
 from pt_app_utils import response_may_be_blocked_by_safety
 from pt_app_utils import summarize_free_text
 from pt_app_utils import summarize_items
@@ -183,6 +186,21 @@ FLEXIBILITY_TEST_HELP = {
     "SLR": "【方法】背臥位で膝を伸展したまま下肢を他動挙上する。【意義】ハムストリングスの短縮度合い、または神経根症状の有無を評価。"
 }
 
+LAXITY_BILATERAL_TESTS = {
+    "手関節": "母指が前腕掌側につく",
+    "肘関節": "肘過伸展15°以上",
+    "肩関節": "背中で指が組める",
+    "膝関節": "膝過伸展10°以上",
+    "足関節": "足関節背屈45°以上",
+}
+
+LAXITY_SINGLE_TESTS = {
+    "脊柱": "立位体前屈で手掌全体が床につく",
+    "股関節": "立位で股関節を外旋し、足先が180°以上開く",
+}
+
+GRIP_STRENGTH_JOINTS = {"頸部", "手関節", "手指"}
+
 st.title("🦴 Yudai式：AI理学療法アシスタント")
 st.warning(
     "患者氏名、住所、電話番号、生年月日、保険証情報などの個人情報は入力しないでください。\n\n"
@@ -324,6 +342,45 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
 
 st.divider()
 
+# 関節弛緩性テスト
+st.subheader("🧬 関節弛緩性テスト")
+st.caption("東大式全身関節弛緩性テスト（7点満点）")
+
+laxity_bilateral_results = {}
+for index, (item, criterion) in enumerate(LAXITY_BILATERAL_TESTS.items()):
+    description_column, right_column, left_column, _ = st.columns([3, 1, 1, 2])
+    with description_column:
+        st.markdown(f"**{item}**：{criterion}")
+    with right_column:
+        right_positive = st.checkbox("右", key=f"laxity_bilateral_{index}_right")
+    with left_column:
+        left_positive = st.checkbox("左", key=f"laxity_bilateral_{index}_left")
+    laxity_bilateral_results[item] = {"右": right_positive, "左": left_positive}
+
+laxity_single_results = {}
+single_columns = st.columns(2)
+for index, (item, criterion) in enumerate(LAXITY_SINGLE_TESTS.items()):
+    with single_columns[index]:
+        laxity_single_results[item] = st.checkbox(
+            f"{item}：{criterion}",
+            key=f"laxity_single_{index}",
+        )
+
+laxity_score = calculate_laxity_score(laxity_bilateral_results, laxity_single_results)
+laxity_positive_items = []
+for item, side_results in laxity_bilateral_results.items():
+    positive_sides = [side_name for side_name, is_positive in side_results.items() if is_positive]
+    if len(positive_sides) == 2:
+        laxity_positive_items.append(f"{item}両側")
+    elif positive_sides:
+        laxity_positive_items.append(f"{item}{positive_sides[0]}")
+for item, is_positive in laxity_single_results.items():
+    if is_positive:
+        laxity_positive_items.append(item)
+
+st.metric("関節弛緩性スコア", f"{laxity_score:.1f} / {LAXITY_MAX_SCORE:.1f}")
+st.divider()
+
 # 筋柔軟性テスト
 thomas_r = thomas_l = ely_r = ely_l = k_ext_r = k_ext_l = False
 slr_ang_r = slr_ang_l = ffd_val = None
@@ -363,6 +420,36 @@ for item in JOINT_CONFIG[joint]["mmt"]:
         c1, c2, _ = st.columns([1, 1, 2])
         with c1: mmt_results["右"][item] = st.selectbox(f"【右】{item}", mmt_opts, index=None, key=f"mr_{item}")
         with c2: mmt_results["左"][item] = st.selectbox(f"【左】{item}", mmt_opts, index=None, key=f"ml_{item}")
+
+grip_strength_r = grip_strength_l = None
+if joint in GRIP_STRENGTH_JOINTS:
+    st.markdown("#### 握力")
+    grip_right_column, grip_left_column, _ = st.columns([1, 1, 2])
+    with grip_right_column:
+        grip_strength_r = st.number_input(
+            "右握力 (kg)",
+            min_value=0.0,
+            value=None,
+            step=0.1,
+            format="%.1f",
+            placeholder="未測定",
+            key="grip_strength_r",
+        )
+    with grip_left_column:
+        grip_strength_l = st.number_input(
+            "左握力 (kg)",
+            min_value=0.0,
+            value=None,
+            step=0.1,
+            format="%.1f",
+            placeholder="未測定",
+            key="grip_strength_l",
+        )
+
+grip_strength_items = format_grip_strength_items(
+    grip_strength_r,
+    grip_strength_l,
+)
 
 st.divider()
 
@@ -502,6 +589,12 @@ preview_adl_items = [
     for item, is_limited in check_results[s].items()
     if is_limited
 ]
+laxity_preview = "、".join(laxity_positive_items) if laxity_positive_items else "特記なし"
+laxity_prompt_result = "、".join(laxity_positive_items) if laxity_positive_items else "明らかな陽性所見なし"
+if joint in GRIP_STRENGTH_JOINTS:
+    grip_strength_preview = "、".join(grip_strength_items) if grip_strength_items else "未測定"
+else:
+    grip_strength_preview = "対象外"
 
 with st.expander("📋 Geminiへ送信する内容の要約を確認", expanded=True):
     st.markdown(
@@ -510,6 +603,8 @@ with st.expander("📋 Geminiへ送信する内容の要約を確認", expanded=
 - **疼痛**: 安静時{nrs_rest}、夜間時{nrs_night}、動作時{nrs_move}、特記：{summarize_free_text(pain_notes)}
 - **ROM異常**: {summarize_items(preview_rom_items)}
 - **MMT低下**: {summarize_items(preview_mmt_items)}
+- **握力**: {grip_strength_preview}
+- **関節弛緩性**: {laxity_preview} / 合計{laxity_score:.1f}点
 - **陽性テスト**: {summarize_items(preview_special_items)}
 - **ADL制限**: {summarize_items(preview_adl_items)} / 特記：{summarize_free_text(adl_notes)}
 - **他部門情報**: {summarize_free_text(other_dept_info)}
@@ -622,6 +717,13 @@ if st.button("🚀 生成開始", use_container_width=True):
 """
         if joint == "腰部":
             common_data += f"・筋柔軟性テスト：{flexibility_str}\n"
+
+        common_data += (
+            f"・関節弛緩性テスト：{laxity_prompt_result} / "
+            f"合計{laxity_score:.1f}点（{LAXITY_MAX_SCORE:.1f}点満点）\n"
+        )
+        if grip_strength_items:
+            common_data += f"・握力：{'、'.join(grip_strength_items)}\n"
 
         common_data += f"""・MMT（4以下）：{"、".join(mmt_list) if mmt_list else "特記なし"}
 ・感覚異常：{"、".join(sensory_pos) if sensory_pos else "特記なし"}
