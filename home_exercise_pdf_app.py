@@ -34,6 +34,7 @@ DATABASE_SESSION_KEY = "exercise_database"
 DATABASE_SOURCE_SESSION_KEY = "exercise_database_source"
 DATABASE_PARAMS_SESSION_KEY = "exercise_database_params"
 SELECTED_EXERCISE_IDS_SESSION_KEY = "selected_exercise_ids"
+EXERCISE_CHECKBOX_KEY_PREFIX = "exercise_select_"
 WRIST_FOREARM_BODY_PART = "手首・前腕部"
 FOOT_BODY_PART = "足部・足趾"
 BODY_PART_ORDER = [
@@ -114,7 +115,14 @@ def store_selected_exercise_ids(selected_ids: set[str]) -> None:
 
 
 def exercise_checkbox_key(exercise_id: str) -> str:
-    return f"exercise_select_{exercise_id}"
+    return f"{EXERCISE_CHECKBOX_KEY_PREFIX}{exercise_id}"
+
+
+def clear_selected_exercise_state() -> None:
+    store_selected_exercise_ids(set())
+    for key in list(st.session_state.keys()):
+        if isinstance(key, str) and key.startswith(EXERCISE_CHECKBOX_KEY_PREFIX):
+            st.session_state[key] = False
 
 
 def sync_visible_checkbox_state(display_df: pd.DataFrame, selected_ids: set[str]) -> None:
@@ -449,6 +457,11 @@ def render_selection_table(filtered_df: pd.DataFrame, all_df: pd.DataFrame) -> p
     st.subheader("運動一覧")
 
     selected_ids = get_selected_exercise_ids()
+    clear_button_col, _ = st.columns([1.2, 5])
+    if clear_button_col.button("全選択解除", disabled=not selected_ids):
+        clear_selected_exercise_state()
+        selected_ids = set()
+        st.success("選択をすべて解除しました。")
 
     if filtered_df.empty:
         st.info("条件に一致する運動はありません。")
