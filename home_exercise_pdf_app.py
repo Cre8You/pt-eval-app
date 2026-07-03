@@ -113,6 +113,19 @@ def store_selected_exercise_ids(selected_ids: set[str]) -> None:
     }
 
 
+def exercise_checkbox_key(exercise_id: str) -> str:
+    return f"exercise_select_{exercise_id}"
+
+
+def sync_visible_checkbox_state(display_df: pd.DataFrame, selected_ids: set[str]) -> None:
+    for exercise_id in display_df["運動ID"].map(text_value):
+        if not exercise_id:
+            continue
+        key = exercise_checkbox_key(exercise_id)
+        if key not in st.session_state:
+            st.session_state[key] = exercise_id in selected_ids
+
+
 def selected_rows_from_ids(df: pd.DataFrame, selected_ids: set[str]) -> pd.DataFrame:
     if not selected_ids:
         return df.iloc[0:0].copy()
@@ -409,6 +422,29 @@ def render_filters(df: pd.DataFrame) -> pd.DataFrame:
     return apply_filters(df, body_part, category, loading_condition, disease_keyword)
 
 
+def render_selection_row(row: pd.Series) -> str | None:
+    exercise_id = text_value(row.get("運動ID"))
+    if not exercise_id:
+        return None
+
+    columns = st.columns([0.6, 1.2, 2.4, 1.4, 1.4, 1.6, 3.4])
+    is_checked = columns[0].checkbox(
+        "選択",
+        key=exercise_checkbox_key(exercise_id),
+        label_visibility="collapsed",
+    )
+    columns[1].write(exercise_id)
+    columns[2].write(text_value(row.get("運動名")))
+    columns[3].write(text_value(row.get("対象部位")))
+    columns[4].write(text_value(row.get("カテゴリ")))
+    columns[5].write(text_value(row.get("回数")))
+    columns[6].write(text_value(row.get("注意点")))
+
+    if is_checked:
+        return exercise_id
+    return None
+
+
 def render_selection_table(filtered_df: pd.DataFrame, all_df: pd.DataFrame) -> pd.DataFrame:
     st.subheader("運動一覧")
 
@@ -419,20 +455,20 @@ def render_selection_table(filtered_df: pd.DataFrame, all_df: pd.DataFrame) -> p
         return selected_rows_from_ids(all_df, selected_ids)
 
     display_df = filtered_df.reset_index(drop=True)
-    table = display_df[DISPLAY_COLUMNS].copy()
-    table.insert(0, "選択", table["運動ID"].map(text_value).isin(selected_ids))
+    sync_visible_checkbox_state(display_df, selected_ids)
 
-    edited_table = st.data_editor(
-        table,
-        hide_index=True,
-        use_container_width=True,
-        column_config={"選択": st.column_config.CheckboxColumn("選択", default=False)},
-        disabled=DISPLAY_COLUMNS,
-        key=selection_table_key(display_df),
-    )
+    header_columns = st.columns([0.6, 1.2, 2.4, 1.4, 1.4, 1.6, 3.4])
+    header_columns[0].markdown("選択")
+    for column, header in zip(header_columns[1:], DISPLAY_COLUMNS):
+        column.markdown(header)
+
+    checked_ids = set()
+    for _, row in display_df.iterrows():
+        checked_id = render_selection_row(row)
+        if checked_id:
+            checked_ids.add(checked_id)
 
     visible_ids = set(display_df["運動ID"].map(text_value).tolist())
-    checked_ids = set(edited_table.loc[edited_table["選択"], "運動ID"].map(text_value).tolist())
     updated_selected_ids = selected_ids.difference(visible_ids).union(checked_ids)
     store_selected_exercise_ids(updated_selected_ids)
 
