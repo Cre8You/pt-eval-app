@@ -34,12 +34,26 @@ DATABASE_SESSION_KEY = "exercise_database"
 DATABASE_SOURCE_SESSION_KEY = "exercise_database_source"
 DATABASE_PARAMS_SESSION_KEY = "exercise_database_params"
 SELECTED_EXERCISE_IDS_SESSION_KEY = "selected_exercise_ids"
+WRIST_FOREARM_BODY_PART = "手首・前腕部"
 FOOT_BODY_PART = "足部・足趾"
-BODY_PART_ORDER = ["頸部", "肩", "腰", "股関節", "膝", FOOT_BODY_PART]
+BODY_PART_ORDER = [
+    "頸部",
+    "肩関節",
+    WRIST_FOREARM_BODY_PART,
+    "腰部",
+    "股関節",
+    "膝関節",
+    FOOT_BODY_PART,
+]
 BODY_PART_ORDER_INDEX = {body_part: index for index, body_part in enumerate(BODY_PART_ORDER)}
 BODY_PART_ALIASES = {
     "首": "頸部",
     "頚部": "頸部",
+    "肩": "肩関節",
+    "手関節・前腕部": WRIST_FOREARM_BODY_PART,
+    WRIST_FOREARM_BODY_PART: WRIST_FOREARM_BODY_PART,
+    "腰": "腰部",
+    "膝": "膝関節",
     "足関節": FOOT_BODY_PART,
     "足指": FOOT_BODY_PART,
     "足趾": FOOT_BODY_PART,
