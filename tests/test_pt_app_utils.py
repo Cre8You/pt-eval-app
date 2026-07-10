@@ -34,6 +34,25 @@ class PrivacyDetectionTests(unittest.TestCase):
 
 
 class OutputValidationTests(unittest.TestCase):
+    REEVALUATION_OUTPUT = """
+【疼痛について】疼痛軽減
+【筋力について】筋力改善
+【感覚異常について】しびれ残存
+【可動域について】可動域改善
+【優先的問題点】
+1. 動作時痛の残存
+2. 下肢筋力低下
+3. 歩行耐久性低下
+【短期目標】屋内歩行の安定
+【長期目標】買い物動作の再獲得
+【治療方針】筋力と歩行能力の改善
+【実施プログラム】
+・ブリッジ
+・歩行練習
+【参加制限に対する具体的な対応方針】外出機会を段階的に増やす
+【機能障害に対する具体的な対応方針】筋力訓練を実施する
+"""
+
     def test_detects_missing_initial_output_items(self):
         missing_items, _, _ = validate_ai_output("電子カルテ用 問題点", is_reevaluation=False)
         self.assertIn("短期目標", missing_items)
@@ -43,6 +62,40 @@ class OutputValidationTests(unittest.TestCase):
         _, output_too_short, output_too_long = validate_ai_output("短い出力", is_reevaluation=False)
         self.assertTrue(output_too_short)
         self.assertFalse(output_too_long)
+
+    def test_accepts_reevaluation_priority_problems_and_program_heading(self):
+        missing_items, _, _ = validate_ai_output(self.REEVALUATION_OUTPUT, is_reevaluation=True)
+        self.assertNotIn("優先的問題点", missing_items)
+        self.assertNotIn("優先的問題点（3項目）", missing_items)
+        self.assertNotIn("実施プログラム", missing_items)
+
+    def test_detects_missing_reevaluation_priority_problems(self):
+        response_text = self.REEVALUATION_OUTPUT.replace(
+            "【優先的問題点】\n1. 動作時痛の残存\n2. 下肢筋力低下\n3. 歩行耐久性低下\n",
+            "",
+        )
+        missing_items, _, _ = validate_ai_output(response_text, is_reevaluation=True)
+        self.assertIn("優先的問題点", missing_items)
+
+    def test_detects_priority_problem_count_other_than_three(self):
+        response_text = self.REEVALUATION_OUTPUT.replace("3. 歩行耐久性低下\n", "")
+        missing_items, _, _ = validate_ai_output(response_text, is_reevaluation=True)
+        self.assertIn("優先的問題点（3項目）", missing_items)
+
+    def test_detects_missing_reevaluation_program_heading(self):
+        response_text = self.REEVALUATION_OUTPUT.replace(
+            "【実施プログラム】\n・ブリッジ\n・歩行練習\n",
+            "",
+        )
+        missing_items, _, _ = validate_ai_output(response_text, is_reevaluation=True)
+        self.assertIn("実施プログラム", missing_items)
+
+    def test_initial_validation_does_not_require_reevaluation_additions(self):
+        response_text = "電子カルテ用 評価結果 問題点 短期目標 長期目標 治療方針 治療内容"
+        missing_items, _, _ = validate_ai_output(response_text, is_reevaluation=False)
+        self.assertNotIn("優先的問題点", missing_items)
+        self.assertNotIn("優先的問題点（3項目）", missing_items)
+        self.assertNotIn("実施プログラム", missing_items)
 
 
 class LaxityScoreTests(unittest.TestCase):

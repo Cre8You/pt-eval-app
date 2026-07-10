@@ -35,7 +35,15 @@ REEVALUATION_OUTPUT_REQUIREMENTS = {
     "今後の方針": ("治療方針", "対応方針"),
     "目標": ("短期目標", "長期目標"),
     "治療内容": ("治療内容", "治療方針", "対応方針"),
+    "優先的問題点": ("優先的問題点", "優先順位の高い問題点", "主要問題点"),
+    "実施プログラム": ("実施プログラム", "実施内容", "治療プログラム"),
 }
+
+PRIORITY_PROBLEM_HEADINGS = ("優先的問題点", "優先順位の高い問題点", "主要問題点")
+PRIORITY_PROBLEM_ITEM_PATTERN = re.compile(
+    r"^\s*(?:[1-9１-９][\.．、\)]|[①②③④⑤⑥⑦⑧⑨])\s*\S+",
+    re.MULTILINE,
+)
 
 OUTPUT_MIN_LENGTH = 300
 OUTPUT_MAX_LENGTH = 5000
@@ -93,6 +101,18 @@ def summarize_free_text(value, limit=120):
     return text if len(text) <= limit else f"{text[:limit]}…"
 
 
+def count_priority_problem_items(response_text):
+    heading_pattern = "|".join(re.escape(heading) for heading in PRIORITY_PROBLEM_HEADINGS)
+    section_match = re.search(
+        rf"(?:【\s*)?(?:{heading_pattern})(?:\s*】)?\s*(.*?)(?=\n\s*【|\Z)",
+        response_text,
+        re.DOTALL,
+    )
+    if section_match is None:
+        return None
+    return len(PRIORITY_PROBLEM_ITEM_PATTERN.findall(section_match.group(1)))
+
+
 def validate_ai_output(response_text, is_reevaluation):
     requirements = REEVALUATION_OUTPUT_REQUIREMENTS if is_reevaluation else INITIAL_OUTPUT_REQUIREMENTS
     missing_items = [
@@ -100,6 +120,10 @@ def validate_ai_output(response_text, is_reevaluation):
         for item_name, markers in requirements.items()
         if not any(marker in response_text for marker in markers)
     ]
+    if is_reevaluation:
+        priority_problem_count = count_priority_problem_items(response_text)
+        if priority_problem_count is not None and priority_problem_count != 3:
+            missing_items.append("優先的問題点（3項目）")
     output_length = len(response_text.strip())
     return missing_items, output_length < OUTPUT_MIN_LENGTH, output_length > OUTPUT_MAX_LENGTH
 
