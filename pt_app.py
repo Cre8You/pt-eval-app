@@ -13,6 +13,11 @@ from pt_app_utils import summarize_free_text
 from pt_app_utils import summarize_items
 from pt_app_utils import validate_ai_output
 
+# アプリのバージョン情報
+APP_VERSION = "1.1.0"
+APP_UPDATED_DATE = "2026年7月10日"
+APP_UPDATE_SUMMARY = "計画書更新機能を追加"
+
 # ページ設定
 st.set_page_config(page_title="理学療法評価AIアシスタント", layout="wide")
 
@@ -269,6 +274,11 @@ with st.sidebar:
         ),
         height=120,
     )
+
+    st.divider()
+    st.caption(f"Version {APP_VERSION}")
+    st.caption(f"最終更新：{APP_UPDATED_DATE}")
+    st.caption(APP_UPDATE_SUMMARY)
 
 # --- メインエリア：評価入力 ---
 st.header(f"【{joint}】の評価入力")
