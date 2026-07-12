@@ -47,8 +47,11 @@ class OutputValidationTests(unittest.TestCase):
 【長期目標】買い物動作の再獲得
 【治療方針】筋力と歩行能力の改善
 【実施プログラム】
-・ブリッジ
-・歩行練習
+・股関節・下肢筋群のストレッチ
+・殿筋群・体幹筋群の筋力エクササイズ
+・下肢筋群の筋力エクササイズ
+・立ち上がり・歩行動作練習
+・自主トレーニング指導
 【参加制限に対する具体的な対応方針】外出機会を段階的に増やす
 【機能障害に対する具体的な対応方針】筋力訓練を実施する
 """
@@ -68,6 +71,7 @@ class OutputValidationTests(unittest.TestCase):
         self.assertNotIn("優先的問題点", missing_items)
         self.assertNotIn("優先的問題点（3項目）", missing_items)
         self.assertNotIn("実施プログラム", missing_items)
+        self.assertNotIn("実施プログラム（5行以内）", missing_items)
 
     def test_detects_missing_reevaluation_priority_problems(self):
         response_text = self.REEVALUATION_OUTPUT.replace(
@@ -83,12 +87,46 @@ class OutputValidationTests(unittest.TestCase):
         self.assertIn("優先的問題点（3項目）", missing_items)
 
     def test_detects_missing_reevaluation_program_heading(self):
+        program_section = self.REEVALUATION_OUTPUT.split("【実施プログラム】", 1)[1].split(
+            "【参加制限に対する具体的な対応方針】",
+            1,
+        )[0]
+        response_text = self.REEVALUATION_OUTPUT.replace(f"【実施プログラム】{program_section}", "")
+        missing_items, _, _ = validate_ai_output(response_text, is_reevaluation=True)
+        self.assertIn("実施プログラム", missing_items)
+
+    def test_accepts_fewer_than_five_reevaluation_programs(self):
         response_text = self.REEVALUATION_OUTPUT.replace(
-            "【実施プログラム】\n・ブリッジ\n・歩行練習\n",
+            "・下肢筋群の筋力エクササイズ\n・立ち上がり・歩行動作練習\n・自主トレーニング指導\n",
             "",
         )
         missing_items, _, _ = validate_ai_output(response_text, is_reevaluation=True)
-        self.assertIn("実施プログラム", missing_items)
+        self.assertNotIn("実施プログラム（5行以内）", missing_items)
+
+    def test_detects_more_than_five_reevaluation_programs(self):
+        response_text = self.REEVALUATION_OUTPUT.replace(
+            "・自主トレーニング指導\n",
+            "・自主トレーニング指導\n・バランス練習\n",
+        )
+        missing_items, _, _ = validate_ai_output(response_text, is_reevaluation=True)
+        self.assertIn("実施プログラム（5行以内）", missing_items)
+
+    def test_counts_supported_reevaluation_program_bullets(self):
+        program_section = self.REEVALUATION_OUTPUT.split("【実施プログラム】", 1)[1].split(
+            "【参加制限に対する具体的な対応方針】",
+            1,
+        )[0]
+        mixed_bullet_section = """
+・ストレッチ
+- 筋力エクササイズ
+* 可動域練習
+1. 動作練習
+① バランス練習
+② 自主トレーニング指導
+"""
+        response_text = self.REEVALUATION_OUTPUT.replace(program_section, mixed_bullet_section)
+        missing_items, _, _ = validate_ai_output(response_text, is_reevaluation=True)
+        self.assertIn("実施プログラム（5行以内）", missing_items)
 
     def test_initial_validation_does_not_require_reevaluation_additions(self):
         response_text = "電子カルテ用 評価結果 問題点 短期目標 長期目標 治療方針 治療内容"
@@ -96,6 +134,7 @@ class OutputValidationTests(unittest.TestCase):
         self.assertNotIn("優先的問題点", missing_items)
         self.assertNotIn("優先的問題点（3項目）", missing_items)
         self.assertNotIn("実施プログラム", missing_items)
+        self.assertNotIn("実施プログラム（5行以内）", missing_items)
 
 
 class LaxityScoreTests(unittest.TestCase):

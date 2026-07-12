@@ -44,6 +44,11 @@ PRIORITY_PROBLEM_ITEM_PATTERN = re.compile(
     r"^\s*(?:[1-9１-９][\.．、\)]|[①②③④⑤⑥⑦⑧⑨])\s*\S+",
     re.MULTILINE,
 )
+PROGRAM_HEADINGS = ("実施プログラム", "実施内容", "治療プログラム")
+PROGRAM_ITEM_PATTERN = re.compile(
+    r"^\s*(?:・|-|\*|[1-9１-９][\.．、\)]|[①②③④⑤⑥⑦⑧⑨])\s*\S+",
+    re.MULTILINE,
+)
 
 OUTPUT_MIN_LENGTH = 300
 OUTPUT_MAX_LENGTH = 5000
@@ -101,8 +106,8 @@ def summarize_free_text(value, limit=120):
     return text if len(text) <= limit else f"{text[:limit]}…"
 
 
-def count_priority_problem_items(response_text):
-    heading_pattern = "|".join(re.escape(heading) for heading in PRIORITY_PROBLEM_HEADINGS)
+def extract_section_body(response_text, headings):
+    heading_pattern = "|".join(re.escape(heading) for heading in headings)
     section_match = re.search(
         rf"(?:【\s*)?(?:{heading_pattern})(?:\s*】)?\s*(.*?)(?=\n\s*【|\Z)",
         response_text,
@@ -110,7 +115,21 @@ def count_priority_problem_items(response_text):
     )
     if section_match is None:
         return None
-    return len(PRIORITY_PROBLEM_ITEM_PATTERN.findall(section_match.group(1)))
+    return section_match.group(1)
+
+
+def count_priority_problem_items(response_text):
+    section_body = extract_section_body(response_text, PRIORITY_PROBLEM_HEADINGS)
+    if section_body is None:
+        return None
+    return len(PRIORITY_PROBLEM_ITEM_PATTERN.findall(section_body))
+
+
+def count_program_items(response_text):
+    section_body = extract_section_body(response_text, PROGRAM_HEADINGS)
+    if section_body is None:
+        return None
+    return len(PROGRAM_ITEM_PATTERN.findall(section_body))
 
 
 def validate_ai_output(response_text, is_reevaluation):
@@ -124,6 +143,9 @@ def validate_ai_output(response_text, is_reevaluation):
         priority_problem_count = count_priority_problem_items(response_text)
         if priority_problem_count is not None and priority_problem_count != 3:
             missing_items.append("優先的問題点（3項目）")
+        program_count = count_program_items(response_text)
+        if program_count is not None and program_count > 5:
+            missing_items.append("実施プログラム（5行以内）")
     output_length = len(response_text.strip())
     return missing_items, output_length < OUTPUT_MIN_LENGTH, output_length > OUTPUT_MAX_LENGTH
 
