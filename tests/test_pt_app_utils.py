@@ -1,10 +1,14 @@
 import unittest
 
 from pt_app_utils import LAXITY_MAX_SCORE
+from pt_app_utils import PLAN_TRANSLATION_LANGUAGES
+from pt_app_utils import build_plan_translation_prompt
 from pt_app_utils import calculate_laxity_score
 from pt_app_utils import classify_gemini_error
 from pt_app_utils import detect_potential_personal_information
+from pt_app_utils import extract_rehabilitation_plan_section
 from pt_app_utils import format_grip_strength_items
+from pt_app_utils import is_plan_translation_usable
 from pt_app_utils import validate_ai_output
 
 
@@ -135,6 +139,85 @@ class OutputValidationTests(unittest.TestCase):
         self.assertNotIn("優先的問題点（3項目）", missing_items)
         self.assertNotIn("実施プログラム", missing_items)
         self.assertNotIn("実施プログラム（5行以内）", missing_items)
+
+
+class PlanTranslationTests(unittest.TestCase):
+    def test_extracts_plan_section_from_initial_output(self):
+        response_text = (
+            "【電子カルテ用】\n評価結果\n"
+            "【計画書用】\n【疼痛について】動作時痛あり\n【短期目標】屋内歩行安定"
+        )
+        expected = "【計画書用】\n【疼痛について】動作時痛あり\n【短期目標】屋内歩行安定"
+        self.assertEqual(extract_rehabilitation_plan_section(response_text), expected)
+
+    def test_stops_before_next_major_heading(self):
+        response_text = (
+            "【リハビリテーション実施計画書案】\n【疼痛について】軽減\n"
+            "【長期目標】屋外歩行\n【臨床推論】筋力低下が影響"
+        )
+        expected = "【リハビリテーション実施計画書案】\n【疼痛について】軽減\n【長期目標】屋外歩行\n"
+        self.assertEqual(extract_rehabilitation_plan_section(response_text), expected)
+
+    def test_extracts_plan_at_end_of_response(self):
+        response_text = "前文\n【計画書案】\n【治療方針】歩行能力を改善する"
+        self.assertEqual(
+            extract_rehabilitation_plan_section(response_text),
+            "【計画書案】\n【治療方針】歩行能力を改善する",
+        )
+
+    def test_accepts_plan_heading_variations_without_changing_source(self):
+        for heading in (
+            "リハビリテーション実施計画書案",
+            "リハビリテーション計画書案",
+            "リハビリ実施計画書案",
+            "計画書案",
+        ):
+            with self.subTest(heading=heading):
+                plan_text = f"【{heading}】\n【短期目標】疼痛軽減"
+                self.assertEqual(extract_rehabilitation_plan_section(plan_text), plan_text)
+
+    def test_returns_none_without_plan_heading(self):
+        self.assertIsNone(extract_rehabilitation_plan_section("【電子カルテ用】\n評価結果"))
+
+    def test_returns_none_for_empty_text(self):
+        self.assertIsNone(extract_rehabilitation_plan_section(""))
+
+    def test_extracts_reevaluation_output(self):
+        response_text = (
+            "【疼痛について】軽減\n【優先的問題点】\n1. 疼痛\n2. 筋力\n3. 歩行\n"
+            "【実施プログラム】\n・歩行練習"
+        )
+        self.assertEqual(extract_rehabilitation_plan_section(response_text), response_text)
+
+    def test_translation_prompt_contains_language_and_safety_instructions(self):
+        prompt = build_plan_translation_prompt("【計画書用】\n右膝屈曲90°", "English")
+        self.assertIn("English", prompt)
+        self.assertIn("追加・削除・要約・推測しない", prompt)
+        self.assertIn("左右、数値、単位", prompt)
+        self.assertIn("【計画書用】\n右膝屈曲90°", prompt)
+
+    def test_language_settings_include_spanish_and_no_translation(self):
+        self.assertEqual(PLAN_TRANSLATION_LANGUAGES["スペイン語"], "Spanish")
+        self.assertIsNone(PLAN_TRANSLATION_LANGUAGES["翻訳なし"])
+
+    def test_translation_validation_rejects_empty_identical_and_short_results(self):
+        source = "【計画書用】\n【疼痛について】右膝痛あり"
+        self.assertFalse(is_plan_translation_usable(source, ""))
+        self.assertFalse(is_plan_translation_usable(source, source))
+        self.assertFalse(is_plan_translation_usable(source, "Too short"))
+        self.assertTrue(
+            is_plan_translation_usable(
+                source,
+                "Pain: The patient has pain in the right knee during movement.",
+            )
+        )
+
+    def test_existing_japanese_validation_is_unchanged(self):
+        response_text = OutputValidationTests.REEVALUATION_OUTPUT
+        before = validate_ai_output(response_text, is_reevaluation=True)
+        extract_rehabilitation_plan_section(response_text)
+        after = validate_ai_output(response_text, is_reevaluation=True)
+        self.assertEqual(after, before)
 
 
 class LaxityScoreTests(unittest.TestCase):

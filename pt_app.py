@@ -3,20 +3,24 @@ import google.generativeai as genai
 import datetime
 
 from pt_app_utils import classify_gemini_error
+from pt_app_utils import build_plan_translation_prompt
 from pt_app_utils import calculate_laxity_score
 from pt_app_utils import detect_potential_personal_information
+from pt_app_utils import extract_rehabilitation_plan_section
 from pt_app_utils import format_grip_strength_items
 from pt_app_utils import format_measurement_value
+from pt_app_utils import is_plan_translation_usable
 from pt_app_utils import LAXITY_MAX_SCORE
+from pt_app_utils import PLAN_TRANSLATION_LANGUAGES
 from pt_app_utils import response_may_be_blocked_by_safety
 from pt_app_utils import summarize_free_text
 from pt_app_utils import summarize_items
 from pt_app_utils import validate_ai_output
 
 # アプリのバージョン情報
-APP_VERSION = "1.1.1"
-APP_UPDATED_DATE = "2026年7月12日"
-APP_UPDATE_SUMMARY = "実施プログラムの要約を改善"
+APP_VERSION = "1.2.0"
+APP_UPDATED_DATE = "2026年7月14日"
+APP_UPDATE_SUMMARY = "計画書の多言語翻訳を追加"
 
 # ページ設定
 st.set_page_config(page_title="理学療法評価AIアシスタント", layout="wide")
@@ -689,6 +693,14 @@ privacy_confirmed = st.checkbox(
     "個人情報が含まれていないことを確認しました"
 )
 
+translation_language_label = st.selectbox(
+    "計画書の翻訳言語",
+    list(PLAN_TRANSLATION_LANGUAGES.keys()),
+    index=0,
+    help="日本語で生成した計画書部分だけを、選択した言語へ追加翻訳します。",
+)
+target_translation_language = PLAN_TRANSLATION_LANGUAGES[translation_language_label]
+
 # 実行ボタン
 if st.button("🚀 生成開始", use_container_width=True):
     if privacy_findings:
@@ -876,6 +888,59 @@ if st.button("🚀 生成開始", use_container_width=True):
             response_text,
             is_reevaluation=bool(patient_change),
         )
+
+        display_text = response_text
+        translation_warning = None
+        if target_translation_language is not None:
+            plan_text = extract_rehabilitation_plan_section(response_text)
+            if plan_text is None:
+                translation_warning = (
+                    "計画書部分を抽出できなかったため、翻訳を追加できませんでした。"
+                    "日本語原文をご確認ください。"
+                )
+            else:
+                translation_prompt = build_plan_translation_prompt(
+                    plan_text,
+                    target_translation_language,
+                )
+                try:
+                    with st.spinner(f"計画書を{translation_language_label}へ翻訳中です..."):
+                        translation_response = model.generate_content(translation_prompt)
+                except Exception as error:
+                    _, safe_message = classify_gemini_error(error)
+                    translation_warning = (
+                        "計画書の翻訳に失敗しました。日本語原文をご確認ください。\n\n"
+                        f"{safe_message}"
+                    )
+                else:
+                    try:
+                        translated_plan_text = translation_response.text
+                    except Exception:
+                        translated_plan_text = None
+
+                    if not translated_plan_text or not translated_plan_text.strip():
+                        if response_may_be_blocked_by_safety(translation_response):
+                            translation_warning = (
+                                "安全性フィルタなどにより翻訳結果を取得できませんでした。"
+                                "日本語原文をご確認ください。"
+                            )
+                        else:
+                            translation_warning = (
+                                "翻訳結果を取得できませんでした。日本語原文をご確認ください。"
+                            )
+                    elif not is_plan_translation_usable(plan_text, translated_plan_text):
+                        translation_warning = (
+                            "翻訳結果が日本語原文と同一、または短すぎる可能性があるため、"
+                            "翻訳を追加しませんでした。日本語原文をご確認ください。"
+                        )
+                    else:
+                        display_text = (
+                            f"{response_text}\n\n"
+                            f"【計画書翻訳：{translation_language_label}】\n"
+                            f"{translated_plan_text.strip()}\n\n"
+                            "※AIによる参考翻訳です。使用前に医療スタッフが日本語原文と照合してください。"
+                        )
+
         st.subheader("✨ 出力結果")
         st.warning(
             "AI生成文は下書きです。必ず医療者が内容を確認・修正してから使用してください。\n\n"
@@ -891,4 +956,6 @@ if st.button("🚀 生成開始", use_container_width=True):
             st.warning(f"出力が短すぎる可能性があります。（{len(response_text.strip())}文字）")
         if output_too_long:
             st.warning(f"出力が長すぎる可能性があります。（{len(response_text.strip())}文字）")
-        st.text_area("Copy & Paste", response_text, height=600)
+        st.text_area("Copy & Paste", display_text, height=600)
+        if translation_warning:
+            st.warning(translation_warning)
