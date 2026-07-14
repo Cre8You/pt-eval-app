@@ -70,6 +70,26 @@ class OutputValidationTests(unittest.TestCase):
         self.assertTrue(output_too_short)
         self.assertFalse(output_too_long)
 
+    def test_accepts_old_and_new_initial_chart_layouts(self):
+        plan_section = (
+            "【計画書用】\n【短期目標】疼痛軽減\n【長期目標】屋外歩行\n"
+            "【治療方針】機能改善\n【治療内容】可動域練習"
+        )
+        old_layout = (
+            "【電子カルテ用】\n疼痛：安静時0\n関節可動域：制限なし\n"
+            "筋力：MMT5\nADL：自立\n優先的問題点：特記なし\n"
+            f"{plan_section}"
+        )
+        new_layout = (
+            "【電子カルテ用】\n疼痛：\n　安静時0\n関節可動域：\n　制限なし\n"
+            "筋力：\n　MMT5\nADL：\n　自立\n優先的問題点：\n　・特記なし\n"
+            f"{plan_section}"
+        )
+        for response_text in (old_layout, new_layout):
+            with self.subTest(response_text=response_text):
+                missing_items, _, _ = validate_ai_output(response_text, is_reevaluation=False)
+                self.assertEqual(missing_items, [])
+
     def test_accepts_reevaluation_priority_problems_and_program_heading(self):
         missing_items, _, _ = validate_ai_output(self.REEVALUATION_OUTPUT, is_reevaluation=True)
         self.assertNotIn("優先的問題点", missing_items)
@@ -149,6 +169,14 @@ class PlanTranslationTests(unittest.TestCase):
         )
         expected = "【計画書用】\n【疼痛について】動作時痛あり\n【短期目標】屋内歩行安定"
         self.assertEqual(extract_rehabilitation_plan_section(response_text), expected)
+
+    def test_new_chart_layout_does_not_change_plan_extraction(self):
+        plan_text = "【計画書用】\n【疼痛について】動作時痛あり\n【短期目標】屋内歩行安定"
+        response_text = (
+            "【電子カルテ用】\n疼痛：\n　動作時痛あり\n関節可動域：\n　右膝屈曲90°\n"
+            f"{plan_text}"
+        )
+        self.assertEqual(extract_rehabilitation_plan_section(response_text), plan_text)
 
     def test_stops_before_next_major_heading(self):
         response_text = (
