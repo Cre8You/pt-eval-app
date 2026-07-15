@@ -1,3 +1,4 @@
+import math
 import re
 
 
@@ -90,6 +91,11 @@ BRACKETED_HEADING_PATTERN = re.compile(r"^[ \t]*【\s*([^】\r\n]+?)\s*】", re.
 OUTPUT_MIN_LENGTH = 300
 OUTPUT_MAX_LENGTH = 5000
 LAXITY_MAX_SCORE = 7.0
+LOWER_LIMB_BALANCE_JOINTS = {"股関節", "膝関節", "足関節"}
+TUG_REFERENCE_CUTOFF_SECONDS = 13.5
+SINGLE_LEG_STANCE_REFERENCE_SECONDS = 5.0
+SEBT_COMPOSITE_REFERENCE_PERCENT = 94.0
+SEBT_ANTERIOR_ASYMMETRY_REFERENCE_CM = 4.0
 
 
 def detect_potential_personal_information(text_fields):
@@ -125,6 +131,165 @@ def calculate_laxity_score(bilateral_results, single_results):
     )
     single_score = sum(1.0 for is_positive in single_results.values() if is_positive)
     return min(bilateral_score + single_score, LAXITY_MAX_SCORE)
+
+
+def _nonnegative_number_or_none(value):
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(numeric_value) or numeric_value < 0:
+        return None
+    return numeric_value
+
+
+def classify_tug_reference(seconds):
+    seconds = _nonnegative_number_or_none(seconds)
+    if seconds is None:
+        return None
+    if seconds < TUG_REFERENCE_CUTOFF_SECONDS:
+        return f"参考カットオフ{TUG_REFERENCE_CUTOFF_SECONDS:.1f}秒未満"
+    return f"参考カットオフ{TUG_REFERENCE_CUTOFF_SECONDS:.1f}秒以上、総合評価が必要"
+
+
+def classify_single_leg_stance_reference(seconds):
+    seconds = _nonnegative_number_or_none(seconds)
+    if seconds is None:
+        return None
+    if seconds < SINGLE_LEG_STANCE_REFERENCE_SECONDS:
+        return (
+            f"参考値{SINGLE_LEG_STANCE_REFERENCE_SECONDS:g}秒未満、"
+            "静的バランス低下の可能性"
+        )
+    return f"参考値{SINGLE_LEG_STANCE_REFERENCE_SECONDS:g}秒以上"
+
+
+def calculate_sebt_composite_score(anterior, posteromedial, posterolateral, limb_length):
+    values = [
+        _nonnegative_number_or_none(value)
+        for value in (anterior, posteromedial, posterolateral, limb_length)
+    ]
+    if any(value is None for value in values):
+        return None
+    anterior_value, posteromedial_value, posterolateral_value, limb_length_value = values
+    if limb_length_value <= 0:
+        return None
+    score = (
+        (anterior_value + posteromedial_value + posterolateral_value)
+        / (limb_length_value * 3)
+        * 100
+    )
+    return round(score, 1)
+
+
+def calculate_sebt_anterior_asymmetry(right_anterior, left_anterior):
+    right_value = _nonnegative_number_or_none(right_anterior)
+    left_value = _nonnegative_number_or_none(left_anterior)
+    if right_value is None or left_value is None:
+        return None
+    return round(abs(right_value - left_value), 1)
+
+
+def classify_sebt_composite_reference(score):
+    score = _nonnegative_number_or_none(score)
+    if score is None:
+        return None
+    if score < SEBT_COMPOSITE_REFERENCE_PERCENT:
+        return f"参考値{SEBT_COMPOSITE_REFERENCE_PERCENT:g}%未満"
+    return f"参考値{SEBT_COMPOSITE_REFERENCE_PERCENT:g}%以上"
+
+
+def classify_sebt_asymmetry_reference(asymmetry):
+    asymmetry = _nonnegative_number_or_none(asymmetry)
+    if asymmetry is None:
+        return None
+    if asymmetry <= SEBT_ANTERIOR_ASYMMETRY_REFERENCE_CM:
+        return f"参考値{SEBT_ANTERIOR_ASYMMETRY_REFERENCE_CM:g}cm以下"
+    return f"参考値{SEBT_ANTERIOR_ASYMMETRY_REFERENCE_CM:g}cm超"
+
+
+def build_balance_assessment_lines(
+    *,
+    tug_seconds=None,
+    tug_condition="",
+    single_leg_right=None,
+    single_leg_left=None,
+    sebt_right_composite=None,
+    sebt_left_composite=None,
+    sebt_anterior_asymmetry=None,
+    include_references=False,
+):
+    lines = []
+    tug_value = _nonnegative_number_or_none(tug_seconds)
+    if tug_value is not None:
+        tug_line = f"TUG：{tug_value:.1f}秒"
+        condition = str(tug_condition or "").strip()
+        if condition:
+            tug_line += f"、{condition}"
+        if include_references:
+            tug_line += f"（{classify_tug_reference(tug_value)}）"
+        lines.append(tug_line)
+
+    single_values = {
+        "右": _nonnegative_number_or_none(single_leg_right),
+        "左": _nonnegative_number_or_none(single_leg_left),
+    }
+    measured_single_values = {
+        side: value for side, value in single_values.items() if value is not None
+    }
+    if measured_single_values:
+        measurements = "、".join(
+            f"{side}{value:.1f}秒" for side, value in measured_single_values.items()
+        )
+        single_line = f"片脚立位時間（開眼）：{measurements}"
+        if include_references:
+            if (
+                len(measured_single_values) == 2
+                and all(
+                    value >= SINGLE_LEG_STANCE_REFERENCE_SECONDS
+                    for value in measured_single_values.values()
+                )
+            ):
+                single_line += (
+                    f"（左右とも参考値{SINGLE_LEG_STANCE_REFERENCE_SECONDS:g}秒以上）"
+                )
+            else:
+                references = "、".join(
+                    f"{side}：{classify_single_leg_stance_reference(value)}"
+                    for side, value in measured_single_values.items()
+                )
+                single_line += f"（{references}）"
+        lines.append(single_line)
+
+    composite_values = {
+        "右": _nonnegative_number_or_none(sebt_right_composite),
+        "左": _nonnegative_number_or_none(sebt_left_composite),
+    }
+    measured_composite_values = {
+        side: value for side, value in composite_values.items() if value is not None
+    }
+    if measured_composite_values:
+        measurements = "、".join(
+            f"{side}{value:.1f}%" for side, value in measured_composite_values.items()
+        )
+        composite_line = f"SEBT Composite score：{measurements}"
+        if include_references:
+            references = "、".join(
+                f"{side}：{classify_sebt_composite_reference(value)}"
+                for side, value in measured_composite_values.items()
+            )
+            composite_line += f"（{references}）"
+        lines.append(composite_line)
+
+    asymmetry_value = _nonnegative_number_or_none(sebt_anterior_asymmetry)
+    if asymmetry_value is not None:
+        asymmetry_line = f"SEBT 前方到達左右差：{asymmetry_value:.1f}cm"
+        if include_references:
+            asymmetry_line += f"（{classify_sebt_asymmetry_reference(asymmetry_value)}）"
+        lines.append(asymmetry_line)
+    return lines
 
 
 def summarize_items(items, limit=8):
@@ -240,7 +405,7 @@ def count_program_items(response_text):
     return len(PROGRAM_ITEM_PATTERN.findall(section_body))
 
 
-def validate_ai_output(response_text, is_reevaluation):
+def validate_ai_output(response_text, is_reevaluation, require_balance=False):
     requirements = REEVALUATION_OUTPUT_REQUIREMENTS if is_reevaluation else INITIAL_OUTPUT_REQUIREMENTS
     missing_items = [
         item_name
@@ -254,6 +419,8 @@ def validate_ai_output(response_text, is_reevaluation):
         program_count = count_program_items(response_text)
         if program_count is not None and program_count > 5:
             missing_items.append("実施プログラム（5行以内）")
+    elif require_balance and "バランス評価" not in response_text:
+        missing_items.append("バランス評価")
     output_length = len(response_text.strip())
     return missing_items, output_length < OUTPUT_MIN_LENGTH, output_length > OUTPUT_MAX_LENGTH
 

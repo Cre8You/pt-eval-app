@@ -3,24 +3,32 @@ import google.generativeai as genai
 import datetime
 
 from pt_app_utils import classify_gemini_error
+from pt_app_utils import build_balance_assessment_lines
 from pt_app_utils import build_plan_translation_prompt
 from pt_app_utils import calculate_laxity_score
+from pt_app_utils import calculate_sebt_anterior_asymmetry
+from pt_app_utils import calculate_sebt_composite_score
 from pt_app_utils import detect_potential_personal_information
 from pt_app_utils import extract_rehabilitation_plan_section
 from pt_app_utils import format_grip_strength_items
 from pt_app_utils import format_measurement_value
 from pt_app_utils import is_plan_translation_usable
 from pt_app_utils import LAXITY_MAX_SCORE
+from pt_app_utils import LOWER_LIMB_BALANCE_JOINTS
 from pt_app_utils import PLAN_TRANSLATION_LANGUAGES
 from pt_app_utils import response_may_be_blocked_by_safety
+from pt_app_utils import SEBT_ANTERIOR_ASYMMETRY_REFERENCE_CM
+from pt_app_utils import SEBT_COMPOSITE_REFERENCE_PERCENT
+from pt_app_utils import SINGLE_LEG_STANCE_REFERENCE_SECONDS
 from pt_app_utils import summarize_free_text
 from pt_app_utils import summarize_items
+from pt_app_utils import TUG_REFERENCE_CUTOFF_SECONDS
 from pt_app_utils import validate_ai_output
 
 # アプリのバージョン情報
-APP_VERSION = "1.2.1"
-APP_UPDATED_DATE = "2026年7月14日"
-APP_UPDATE_SUMMARY = "カルテ出力のレイアウトを改善"
+APP_VERSION = "1.3.0"
+APP_UPDATED_DATE = "2026年7月15日"
+APP_UPDATE_SUMMARY = "下肢バランス評価を追加"
 
 # ページ設定
 st.set_page_config(page_title="理学療法評価AIアシスタント", layout="wide")
@@ -509,7 +517,211 @@ grip_strength_items = format_grip_strength_items(
     grip_strength_l,
 )
 
+balance_evaluation_enabled = joint in LOWER_LIMB_BALANCE_JOINTS
+tug_seconds = None
+tug_condition = ""
+single_leg_stance_right = None
+single_leg_stance_left = None
+sebt_right_limb_length = None
+sebt_right_anterior = None
+sebt_right_posteromedial = None
+sebt_right_posterolateral = None
+sebt_left_limb_length = None
+sebt_left_anterior = None
+sebt_left_posteromedial = None
+sebt_left_posterolateral = None
+
 st.divider()
+
+if balance_evaluation_enabled:
+    st.subheader("⚖️ バランス評価")
+    with st.expander("TUG・片脚立位・SEBTを入力", expanded=True):
+        st.markdown("#### TUG（Timed Up and Go Test）")
+        tug_input_column, tug_condition_column = st.columns([1, 2], gap="small")
+        with tug_input_column:
+            tug_seconds = st.number_input(
+                "TUG（秒）",
+                min_value=0.0,
+                max_value=180.0,
+                value=None,
+                step=0.1,
+                format="%.1f",
+                placeholder="未測定",
+                key="balance_tug_seconds",
+                help=f"参考カットオフ：{TUG_REFERENCE_CUTOFF_SECONDS:.1f}秒",
+            )
+        with tug_condition_column:
+            tug_condition = st.text_input(
+                "歩行補助具・介助条件（任意）",
+                placeholder="例：T字杖使用、見守り",
+                key="balance_tug_condition",
+            )
+        st.caption(
+            "参考値は主に地域在住高齢者の転倒リスク評価で用いられる値です。"
+            "年齢、疾患、術後時期、補助具や介助条件を含めて総合的に判断してください。"
+        )
+
+        st.markdown("#### 片脚立位時間（開眼）")
+        single_right_column, single_left_column, _ = st.columns([1, 1, 2], gap="small")
+        with single_right_column:
+            single_leg_stance_right = st.number_input(
+                "片脚立位時間 右（秒）",
+                min_value=0.0,
+                max_value=60.0,
+                value=None,
+                step=0.1,
+                format="%.1f",
+                placeholder="未測定",
+                key="balance_single_leg_right",
+            )
+        with single_left_column:
+            single_leg_stance_left = st.number_input(
+                "片脚立位時間 左（秒）",
+                min_value=0.0,
+                max_value=60.0,
+                value=None,
+                step=0.1,
+                format="%.1f",
+                placeholder="未測定",
+                key="balance_single_leg_left",
+            )
+        st.caption(
+            "片脚立位時間は年齢や測定条件の影響を受けます。"
+            f"{SINGLE_LEG_STANCE_REFERENCE_SECONDS:g}秒は高齢者の静的バランスを確認するための参考値であり、"
+            "単独で正常・異常を判定しないでください。"
+        )
+
+        st.markdown("#### SEBT（3方向版）")
+        sebt_right_column, sebt_left_column = st.columns(2, gap="small")
+        with sebt_right_column:
+            st.markdown("**右支持脚**")
+            sebt_right_limb_length = st.number_input(
+                "右下肢長（cm）",
+                min_value=0.0,
+                value=None,
+                step=0.1,
+                format="%.1f",
+                placeholder="未測定",
+                key="balance_sebt_right_limb_length",
+            )
+            sebt_right_anterior = st.number_input(
+                "右支持 前方最大到達距離（cm）",
+                min_value=0.0,
+                value=None,
+                step=0.1,
+                format="%.1f",
+                placeholder="未測定",
+                key="balance_sebt_right_anterior",
+            )
+            sebt_right_posteromedial = st.number_input(
+                "右支持 後内側最大到達距離（cm）",
+                min_value=0.0,
+                value=None,
+                step=0.1,
+                format="%.1f",
+                placeholder="未測定",
+                key="balance_sebt_right_posteromedial",
+            )
+            sebt_right_posterolateral = st.number_input(
+                "右支持 後外側最大到達距離（cm）",
+                min_value=0.0,
+                value=None,
+                step=0.1,
+                format="%.1f",
+                placeholder="未測定",
+                key="balance_sebt_right_posterolateral",
+            )
+        with sebt_left_column:
+            st.markdown("**左支持脚**")
+            sebt_left_limb_length = st.number_input(
+                "左下肢長（cm）",
+                min_value=0.0,
+                value=None,
+                step=0.1,
+                format="%.1f",
+                placeholder="未測定",
+                key="balance_sebt_left_limb_length",
+            )
+            sebt_left_anterior = st.number_input(
+                "左支持 前方最大到達距離（cm）",
+                min_value=0.0,
+                value=None,
+                step=0.1,
+                format="%.1f",
+                placeholder="未測定",
+                key="balance_sebt_left_anterior",
+            )
+            sebt_left_posteromedial = st.number_input(
+                "左支持 後内側最大到達距離（cm）",
+                min_value=0.0,
+                value=None,
+                step=0.1,
+                format="%.1f",
+                placeholder="未測定",
+                key="balance_sebt_left_posteromedial",
+            )
+            sebt_left_posterolateral = st.number_input(
+                "左支持 後外側最大到達距離（cm）",
+                min_value=0.0,
+                value=None,
+                step=0.1,
+                format="%.1f",
+                placeholder="未測定",
+                key="balance_sebt_left_posterolateral",
+            )
+        st.caption(
+            f"Composite score {SEBT_COMPOSITE_REFERENCE_PERCENT:g}%および"
+            f"前方到達左右差{SEBT_ANTERIOR_ASYMMETRY_REFERENCE_CM:g}cmは、"
+            "主にスポーツ選手の下肢傷害リスク研究で用いられる参考値です。"
+            "一般整形外科患者、高齢者、術後患者へ一律に適用せず、"
+            "年齢・疾患・競技特性を含めて解釈してください。"
+        )
+
+sebt_right_composite = calculate_sebt_composite_score(
+    sebt_right_anterior,
+    sebt_right_posteromedial,
+    sebt_right_posterolateral,
+    sebt_right_limb_length,
+)
+sebt_left_composite = calculate_sebt_composite_score(
+    sebt_left_anterior,
+    sebt_left_posteromedial,
+    sebt_left_posterolateral,
+    sebt_left_limb_length,
+)
+sebt_anterior_asymmetry = calculate_sebt_anterior_asymmetry(
+    sebt_right_anterior,
+    sebt_left_anterior,
+)
+balance_preview_lines = build_balance_assessment_lines(
+    tug_seconds=tug_seconds,
+    tug_condition=tug_condition,
+    single_leg_right=single_leg_stance_right,
+    single_leg_left=single_leg_stance_left,
+    sebt_right_composite=sebt_right_composite,
+    sebt_left_composite=sebt_left_composite,
+    sebt_anterior_asymmetry=sebt_anterior_asymmetry,
+)
+balance_prompt_lines = build_balance_assessment_lines(
+    tug_seconds=tug_seconds,
+    tug_condition=tug_condition,
+    single_leg_right=single_leg_stance_right,
+    single_leg_left=single_leg_stance_left,
+    sebt_right_composite=sebt_right_composite,
+    sebt_left_composite=sebt_left_composite,
+    sebt_anterior_asymmetry=sebt_anterior_asymmetry,
+    include_references=True,
+)
+balance_measured = bool(balance_preview_lines)
+
+if balance_evaluation_enabled:
+    if balance_prompt_lines:
+        st.markdown("**参考判定**")
+        for balance_line in balance_prompt_lines:
+            st.write(f"・{balance_line}")
+    else:
+        st.caption("全項目未測定です。")
+    st.divider()
 
 # --- 感覚検査 ---
 if "sensory" in JOINT_CONFIG[joint] and JOINT_CONFIG[joint]["sensory"]:
@@ -653,6 +865,12 @@ if joint in GRIP_STRENGTH_JOINTS:
     grip_strength_preview = "、".join(grip_strength_items) if grip_strength_items else "未測定"
 else:
     grip_strength_preview = "対象外"
+balance_preview_block = ""
+if balance_evaluation_enabled:
+    balance_preview_items = balance_preview_lines or ["未測定"]
+    balance_preview_block = "- **バランス評価**:\n" + "\n".join(
+        f"  - {item}" for item in balance_preview_items
+    ) + "\n"
 
 with st.expander("📋 Geminiへ送信する内容の要約を確認", expanded=True):
     st.markdown(
@@ -663,7 +881,7 @@ with st.expander("📋 Geminiへ送信する内容の要約を確認", expanded=
 - **MMT低下**: {summarize_items(preview_mmt_items)}
 - **握力**: {grip_strength_preview}
 - **関節弛緩性**: {laxity_preview} / 合計{laxity_score:.1f}点
-- **陽性テスト**: {summarize_items(preview_special_items)}
+{balance_preview_block}- **陽性テスト**: {summarize_items(preview_special_items)}
 - **ADL制限**: {summarize_items(preview_adl_items)} / 特記：{summarize_free_text(adl_notes)}
 - **他部門情報**: {summarize_free_text(other_dept_info)}
 - **PT考察**: {summarize_free_text(pt_observation)}
@@ -790,6 +1008,15 @@ if st.button("🚀 生成開始", use_container_width=True):
         )
         if grip_strength_items:
             common_data += f"・握力：{'、'.join(grip_strength_items)}\n"
+        if balance_evaluation_enabled:
+            common_data += "・バランス評価：\n"
+            if balance_prompt_lines:
+                common_data += "\n".join(
+                    f"　{balance_line}" for balance_line in balance_prompt_lines
+                )
+                common_data += "\n"
+            else:
+                common_data += "　未測定\n"
 
         common_data += f"""・MMT（4以下）：{"、".join(mmt_list) if mmt_list else "特記なし"}
 ・感覚異常：{"、".join(sensory_pos) if sensory_pos else "特記なし"}
@@ -797,6 +1024,21 @@ if st.button("🚀 生成開始", use_container_width=True):
 ・動作/制限(ADL)：{adl_str}
 ・PT考察：{pt_observation if pt_observation else "特記なし"}
 """
+
+        balance_interpretation_instruction = ""
+        balance_initial_output_instruction = ""
+        balance_reevaluation_instruction = ""
+        if balance_evaluation_enabled:
+            balance_interpretation_instruction = """
+【バランス評価の解釈】
+・測定されているTUG、片脚立位時間、SEBTをバランス機能として評価し、左右差を考慮してください。
+・TUGは歩行補助具・介助条件も考慮してください。
+・参考カットオフを絶対的な診断基準として扱わず、年齢、疾患、術後時期、疼痛、ROM、筋力、歩行、ADLと統合して解釈してください。
+・カットオフだけで転倒リスクや傷害リスクを断定しないでください。
+・未測定項目を異常と判断せず、入力されていない測定値を推測しないでください。
+"""
+            balance_initial_output_instruction = "・バランス評価の測定値が1つ以上ある場合は、「バランス評価：」を単独行で表示し、測定された項目だけを次行以降へ全角スペース1つで字下げして記載してください。TUG、片脚立位時間、SEBT Composite score、前方到達左右差を入力どおりに記載し、参考値は断定せず統合的な所見としてください。すべて未測定の場合は「異常なし」と推測して出力せず、バランス評価項目自体を省略してください。"
+            balance_reevaluation_instruction = "・バランス評価の測定値がある場合は、優先的問題点、目標、治療方針の判断材料へ含めてください。ただし、【実施プログラム】には計画書更新用カルテ内容に記載されていないプログラムを追加しないでください。"
         
         if patient_change:
             prompt = f"""
@@ -805,6 +1047,8 @@ if st.button("🚀 生成開始", use_container_width=True):
 【計画書更新用カルテ内容】
 {patient_change}
 【条件】
+{balance_interpretation_instruction}
+{balance_reevaluation_instruction}
 今回は「計画書の更新」です。以下の【11項目】のみを出力してください。挨拶や前置きは不要です。文章中での強調記号（カッコやアスタリスク等）は一切使用しないでください（指定した項目名のみ【】を使用可）。
 ・【疼痛について】（20文字以内。変化の経過を踏まえて記載）
 ・【筋力について】（20文字以内。変化の経過を踏まえて記載）
@@ -834,8 +1078,10 @@ if st.button("🚀 生成開始", use_container_width=True):
 あなたは19年の経験を持つベテラン理学療法士です。以下のデータを元に電子カルテと計画書を作成してください。
 {common_data}
 【条件】
+{balance_interpretation_instruction}
 以下の構成と文字数制限を必ず遵守して出力してください。挨拶や前置きは不要です。いきなり【電子カルテ用】から出力してください。文章中での強調記号（カッコやアスタリスク等）は一切使用しないでください（指定した項目名のみ【】を使用可）。
 【電子カルテ用】
+{balance_initial_output_instruction}
 ・実施した評価結果は、各評価項目の「項目名：」だけを1行で表示し、結果は必ず次の行へ表示してください。「項目名：結果」の1行形式にはしないでください。
 ・結果行の先頭には、半角スペースではなく全角スペース「　」を1つ入れてください。項目名と結果の間、および次の項目との間に空行を入れないでください。
 ・結果が複数行になる場合も、各結果行の先頭へ全角スペース「　」を1つ入れてください。箇条書きにする場合は「　・結果」の形式にしてください。
@@ -900,6 +1146,7 @@ if st.button("🚀 生成開始", use_container_width=True):
         missing_items, output_too_short, output_too_long = validate_ai_output(
             response_text,
             is_reevaluation=bool(patient_change),
+            require_balance=balance_measured and not bool(patient_change),
         )
 
         display_text = response_text
