@@ -2,9 +2,16 @@ import unittest
 
 from pt_app_utils import LAXITY_MAX_SCORE
 from pt_app_utils import PLAN_TRANSLATION_LANGUAGES
+from pt_app_utils import build_balance_assessment_lines
 from pt_app_utils import build_plan_translation_prompt
 from pt_app_utils import calculate_laxity_score
+from pt_app_utils import calculate_sebt_anterior_asymmetry
+from pt_app_utils import calculate_sebt_composite_score
+from pt_app_utils import classify_sebt_asymmetry_reference
+from pt_app_utils import classify_sebt_composite_reference
 from pt_app_utils import classify_gemini_error
+from pt_app_utils import classify_single_leg_stance_reference
+from pt_app_utils import classify_tug_reference
 from pt_app_utils import detect_potential_personal_information
 from pt_app_utils import extract_rehabilitation_plan_section
 from pt_app_utils import format_grip_strength_items
@@ -246,6 +253,147 @@ class PlanTranslationTests(unittest.TestCase):
         extract_rehabilitation_plan_section(response_text)
         after = validate_ai_output(response_text, is_reevaluation=True)
         self.assertEqual(after, before)
+
+
+class BalanceAssessmentTests(unittest.TestCase):
+    INITIAL_COMPLETE_OUTPUT = (
+        "電子カルテ用 評価結果 問題点 短期目標 長期目標 治療方針 治療内容"
+    )
+
+    def test_tug_unmeasured_is_none(self):
+        self.assertIsNone(classify_tug_reference(None))
+        self.assertEqual(build_balance_assessment_lines(tug_seconds=None), [])
+
+    def test_tug_zero_is_a_measured_value(self):
+        lines = build_balance_assessment_lines(tug_seconds=0.0)
+        self.assertEqual(lines, ["TUG：0.0秒"])
+
+    def test_tug_cutoff_boundary(self):
+        self.assertIn("13.5秒未満", classify_tug_reference(13.4))
+        self.assertIn("13.5秒以上", classify_tug_reference(13.5))
+
+    def test_tug_reference_does_not_make_definitive_risk_claim(self):
+        for seconds in (13.4, 13.5):
+            with self.subTest(seconds=seconds):
+                result = classify_tug_reference(seconds)
+                for prohibited_text in ("正常", "異常", "転倒リスクあり"):
+                    self.assertNotIn(prohibited_text, result)
+
+    def test_tug_condition_is_included(self):
+        lines = build_balance_assessment_lines(
+            tug_seconds=16.2,
+            tug_condition="T字杖使用",
+            include_references=True,
+        )
+        self.assertIn("TUG：16.2秒、T字杖使用", lines[0])
+
+    def test_single_leg_stance_cutoff_boundary(self):
+        self.assertIn("5秒未満", classify_single_leg_stance_reference(4.9))
+        self.assertIn("5秒以上", classify_single_leg_stance_reference(5.0))
+
+    def test_single_leg_stance_supports_one_measured_side_and_zero(self):
+        lines = build_balance_assessment_lines(
+            single_leg_right=0.0,
+            single_leg_left=None,
+        )
+        self.assertEqual(lines, ["片脚立位時間（開眼）：右0.0秒"])
+
+    def test_single_leg_stance_handles_right_and_left_independently(self):
+        lines = build_balance_assessment_lines(
+            single_leg_right=15.0,
+            single_leg_left=3.2,
+            include_references=True,
+        )
+        self.assertIn("右15.0秒、左3.2秒", lines[0])
+        self.assertIn("左：参考値5秒未満", lines[0])
+
+    def test_calculates_sebt_composite_score(self):
+        self.assertEqual(calculate_sebt_composite_score(60.0, 70.0, 80.0, 80.0), 87.5)
+
+    def test_sebt_composite_rounds_to_one_decimal_place(self):
+        raw_score = (62.3 + 70.2 + 74.4) / (80.1 * 3) * 100
+        self.assertEqual(
+            calculate_sebt_composite_score(62.3, 70.2, 74.4, 80.1),
+            round(raw_score, 1),
+        )
+
+    def test_sebt_composite_requires_all_values(self):
+        self.assertIsNone(calculate_sebt_composite_score(None, 70.0, 80.0, 80.0))
+        self.assertIsNone(calculate_sebt_composite_score(60.0, None, 80.0, 80.0))
+        self.assertIsNone(calculate_sebt_composite_score(60.0, 70.0, None, 80.0))
+        self.assertIsNone(calculate_sebt_composite_score(60.0, 70.0, 80.0, None))
+
+    def test_sebt_composite_rejects_nonpositive_limb_length(self):
+        self.assertIsNone(calculate_sebt_composite_score(60.0, 70.0, 80.0, 0.0))
+        self.assertIsNone(calculate_sebt_composite_score(60.0, 70.0, 80.0, -1.0))
+
+    def test_sebt_composite_accepts_zero_reach_distances(self):
+        self.assertEqual(calculate_sebt_composite_score(0.0, 0.0, 0.0, 80.0), 0.0)
+
+    def test_sebt_composite_reference_boundary(self):
+        self.assertIn("94%未満", classify_sebt_composite_reference(93.9))
+        self.assertIn("94%以上", classify_sebt_composite_reference(94.0))
+
+    def test_calculates_sebt_anterior_asymmetry(self):
+        self.assertEqual(calculate_sebt_anterior_asymmetry(60.0, 55.9), 4.1)
+
+    def test_sebt_anterior_asymmetry_rounds_to_one_decimal_place(self):
+        self.assertEqual(calculate_sebt_anterior_asymmetry(60.04, 55.95), 4.1)
+
+    def test_sebt_anterior_asymmetry_requires_both_sides(self):
+        self.assertIsNone(calculate_sebt_anterior_asymmetry(None, 55.9))
+        self.assertIsNone(calculate_sebt_anterior_asymmetry(60.0, None))
+
+    def test_sebt_anterior_asymmetry_reference_boundary(self):
+        self.assertIn("4cm以下", classify_sebt_asymmetry_reference(4.0))
+        self.assertIn("4cm超", classify_sebt_asymmetry_reference(4.1))
+
+    def test_balance_lines_are_empty_when_everything_is_unmeasured(self):
+        self.assertEqual(build_balance_assessment_lines(), [])
+
+    def test_balance_lines_do_not_use_definitive_abnormality_terms(self):
+        lines = build_balance_assessment_lines(
+            tug_seconds=15.0,
+            single_leg_right=3.0,
+            sebt_right_composite=90.0,
+            sebt_anterior_asymmetry=5.0,
+            include_references=True,
+        )
+        text = "\n".join(lines)
+        for prohibited_text in ("異常", "転倒リスクあり", "受傷リスクあり"):
+            self.assertNotIn(prohibited_text, text)
+
+    def test_initial_validation_requires_balance_only_when_requested(self):
+        missing_items, _, _ = validate_ai_output(
+            self.INITIAL_COMPLETE_OUTPUT,
+            is_reevaluation=False,
+            require_balance=False,
+        )
+        self.assertNotIn("バランス評価", missing_items)
+
+        missing_items, _, _ = validate_ai_output(
+            self.INITIAL_COMPLETE_OUTPUT,
+            is_reevaluation=False,
+            require_balance=True,
+        )
+        self.assertIn("バランス評価", missing_items)
+
+        missing_items, _, _ = validate_ai_output(
+            f"{self.INITIAL_COMPLETE_OUTPUT} バランス評価",
+            is_reevaluation=False,
+            require_balance=True,
+        )
+        self.assertNotIn("バランス評価", missing_items)
+
+    def test_reevaluation_validation_is_unchanged_by_balance_requirement(self):
+        missing_items, _, _ = validate_ai_output(
+            OutputValidationTests.REEVALUATION_OUTPUT,
+            is_reevaluation=True,
+            require_balance=True,
+        )
+        self.assertNotIn("バランス評価", missing_items)
+        self.assertNotIn("優先的問題点（3項目）", missing_items)
+        self.assertNotIn("実施プログラム（5行以内）", missing_items)
 
 
 class LaxityScoreTests(unittest.TestCase):
