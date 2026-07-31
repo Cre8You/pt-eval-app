@@ -5,6 +5,7 @@ import datetime
 from pt_app_utils import classify_gemini_error
 from pt_app_utils import build_balance_assessment_lines
 from pt_app_utils import build_plan_translation_prompt
+from pt_app_utils import build_pt_free_text_instruction
 from pt_app_utils import calculate_laxity_score
 from pt_app_utils import calculate_sebt_anterior_asymmetry
 from pt_app_utils import calculate_sebt_composite_score
@@ -15,6 +16,7 @@ from pt_app_utils import format_measurement_value
 from pt_app_utils import is_plan_translation_usable
 from pt_app_utils import LAXITY_MAX_SCORE
 from pt_app_utils import LOWER_LIMB_BALANCE_JOINTS
+from pt_app_utils import normalize_pt_free_text
 from pt_app_utils import PLAN_TRANSLATION_LANGUAGES
 from pt_app_utils import response_may_be_blocked_by_safety
 from pt_app_utils import SEBT_ANTERIOR_ASYMMETRY_REFERENCE_CM
@@ -26,9 +28,9 @@ from pt_app_utils import TUG_REFERENCE_CUTOFF_SECONDS
 from pt_app_utils import validate_ai_output
 
 # アプリのバージョン情報
-APP_VERSION = "1.3.0"
-APP_UPDATED_DATE = "2026年7月15日"
-APP_UPDATE_SUMMARY = "下肢バランス評価を追加"
+APP_VERSION = "1.4.0"
+APP_UPDATED_DATE = "2026年7月31日"
+APP_UPDATE_SUMMARY = "補足評価結果とPT推論の自動整理を追加"
 
 # ページ設定
 st.set_page_config(page_title="理学療法評価AIアシスタント", layout="wide")
@@ -823,9 +825,19 @@ other_dept_info = st.text_area("医師や看護師など他部門からの共有
 
 st.divider()
 
-# PT考察
-st.subheader("🧠 PT考察")
-pt_observation = st.text_area("PTの臨床推論・原因の仮説", height=120)
+# 補足評価・PT推論
+st.subheader("🧠 補足評価・PT推論")
+pt_observation = st.text_area(
+    "項目にない評価結果・PTの臨床推論",
+    height=120,
+    key="pt_observation",
+    help=(
+        "既存の項目にない評価結果、姿勢・動作・歩行所見、触診所見、"
+        "臨床推論などを入力してください。AIが補足評価結果とPT推論に分け、"
+        "文章として整理します。"
+    ),
+)
+normalized_pt_observation = normalize_pt_free_text(pt_observation)
 
 st.divider()
 
@@ -871,6 +883,9 @@ if balance_evaluation_enabled:
     balance_preview_block = "- **バランス評価**:\n" + "\n".join(
         f"  - {item}" for item in balance_preview_items
     ) + "\n"
+pt_free_text_preview = (
+    summarize_free_text(pt_observation) if normalized_pt_observation else "入力なし"
+)
 
 with st.expander("📋 Geminiへ送信する内容の要約を確認", expanded=True):
     st.markdown(
@@ -884,7 +899,7 @@ with st.expander("📋 Geminiへ送信する内容の要約を確認", expanded=
 {balance_preview_block}- **陽性テスト**: {summarize_items(preview_special_items)}
 - **ADL制限**: {summarize_items(preview_adl_items)} / 特記：{summarize_free_text(adl_notes)}
 - **他部門情報**: {summarize_free_text(other_dept_info)}
-- **PT考察**: {summarize_free_text(pt_observation)}
+- **PT自由記載**: {pt_free_text_preview}
 - **計画書更新用カルテ内容**: {summarize_free_text(patient_change)}
 """
     )
@@ -895,7 +910,7 @@ privacy_scan_fields = {
     "歩行の特記事項": motion_walking,
     "ADLの特記事項": adl_notes,
     "他部門からの情報": other_dept_info,
-    "PT考察": pt_observation,
+    "PT自由記載": pt_observation,
     "計画書更新用カルテ内容": patient_change,
 }
 privacy_findings = detect_potential_personal_information(privacy_scan_fields)
@@ -1022,8 +1037,14 @@ if st.button("🚀 生成開始", use_container_width=True):
 ・感覚異常：{"、".join(sensory_pos) if sensory_pos else "特記なし"}
 ・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
 ・動作/制限(ADL)：{adl_str}
-・PT考察：{pt_observation if pt_observation else "特記なし"}
 """
+        if normalized_pt_observation:
+            common_data += (
+                "・PT自由記載（補足評価結果・臨床推論が混在する可能性あり）："
+                f"{normalized_pt_observation}\n"
+            )
+        else:
+            common_data += "・PT自由記載：入力なし\n"
 
         balance_interpretation_instruction = ""
         balance_initial_output_instruction = ""
@@ -1049,6 +1070,7 @@ if st.button("🚀 生成開始", use_container_width=True):
 【条件】
 {balance_interpretation_instruction}
 {balance_reevaluation_instruction}
+{build_pt_free_text_instruction(is_reevaluation=True)}
 今回は「計画書の更新」です。以下の【11項目】のみを出力してください。挨拶や前置きは不要です。文章中での強調記号（カッコやアスタリスク等）は一切使用しないでください（指定した項目名のみ【】を使用可）。
 ・【疼痛について】（20文字以内。変化の経過を踏まえて記載）
 ・【筋力について】（20文字以内。変化の経過を踏まえて記載）
@@ -1062,7 +1084,7 @@ if st.button("🚀 生成開始", use_container_width=True):
   同じ問題の言い換えによる重複を避け、各項目は計画書へ転記しやすい簡潔な表現にしてください。入力情報から判断できない内容や新しい診断名を推測で追加しないでください。3項目を抽出できる情報がない場合も番号は省略せず、「情報不足：判断できる記載なし」など不足が分かる表現にしてください。
 ・【短期目標】（100文字以内。変化の経過を踏まえて記載）
 ・【長期目標】（50文字以内。変化の経過を踏まえて記載）
-・【治療方針】（120文字以内。変化の経過とPT考察を踏まえて記載）
+・【治療方針】（120文字以内。変化の経過とPT自由記載に明示された推論を踏まえて記載）
 ・【実施プログラム】
   計画書更新用カルテ内容に実際に記載されている実施内容だけを、身体部位とプログラムの種類ごとに整理して箇条書きにしてください。出力は原則5行、最大5行とし、情報が少ない場合は無理に5行へ水増ししないでください。
   個別の運動名や治療手技を細かく羅列せず、同じ身体部位・同じ目的の内容は1行へ統合し、基本的に「部位＋プログラムの種類」で表現してください。個別種目名は分類に必要な場合だけ使用してください。
@@ -1079,6 +1101,7 @@ if st.button("🚀 生成開始", use_container_width=True):
 {common_data}
 【条件】
 {balance_interpretation_instruction}
+{build_pt_free_text_instruction(is_reevaluation=False)}
 以下の構成と文字数制限を必ず遵守して出力してください。挨拶や前置きは不要です。いきなり【電子カルテ用】から出力してください。文章中での強調記号（カッコやアスタリスク等）は一切使用しないでください（指定した項目名のみ【】を使用可）。
 【電子カルテ用】
 {balance_initial_output_instruction}
@@ -1095,7 +1118,7 @@ if st.button("🚀 生成開始", use_container_width=True):
   筋力：
   　・棘上筋：右MMT4、左MMT5
   　・三角筋：右MMT4、左MMT5
-・優先順位が高い問題点を「優先的問題点：」の単独行に続けて、各結果行を全角スペースで字下げし、3つの箇条書きで挙げてください（改善が見込める、かつPT考察から導き出される視点から判断。1項目につき30文字程度で簡潔に）。
+・優先順位が高い問題点を「優先的問題点：」の単独行に続けて、各結果行を全角スペースで字下げし、3つの箇条書きで挙げてください（改善が見込める、かつ構造化評価とPT自由記載に明示された推論から導き出される視点から判断。1項目につき30文字程度で簡潔に）。
 ・最後に必ず以下の期限をそのまま記載してください：
   【標準算定期限】：{std_deadline_str}
   【リハビリ期限】：{rehab_deadline_str}
@@ -1147,6 +1170,7 @@ if st.button("🚀 生成開始", use_container_width=True):
             response_text,
             is_reevaluation=bool(patient_change),
             require_balance=balance_measured and not bool(patient_change),
+            has_pt_free_text=bool(normalized_pt_observation),
         )
 
         display_text = response_text
@@ -1208,9 +1232,9 @@ if st.button("🚀 生成開始", use_container_width=True):
         )
         if missing_items:
             st.warning(
-                "AI出力に不足している可能性がある項目があります。"
+                "AI出力に不足または形式上の確認が必要な項目があります。"
                 "医療者が内容を確認してください。\n\n"
-                f"不足候補: {', '.join(missing_items)}"
+                f"確認候補: {', '.join(missing_items)}"
             )
         if output_too_short:
             st.warning(f"出力が短すぎる可能性があります。（{len(response_text.strip())}文字）")

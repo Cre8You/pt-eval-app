@@ -87,6 +87,14 @@ REHABILITATION_PLAN_CONTENT_HEADINGS = {
     "機能障害に対する具体的な対応方針",
 }
 BRACKETED_HEADING_PATTERN = re.compile(r"^[ \t]*【\s*([^】\r\n]+?)\s*】", re.MULTILINE)
+UNINDENTED_OUTPUT_HEADING_PATTERN = re.compile(
+    r"^[ \t]*(?:【[^】\r\n]+】|[^\s　：:\r\n][^：:\r\n]*[：:])[ \t]*$",
+    re.MULTILINE,
+)
+BULLET_LINE_PATTERN = re.compile(
+    r"^(?:・\s*|[-*]\s+|[0-9０-９]+[.．、\)](?![0-9０-９])\s*|[①-⑳]\s*)\S"
+)
+PT_FREE_TEXT_OUTPUT_HEADINGS = ("補足評価結果", "PT推論")
 
 OUTPUT_MIN_LENGTH = 300
 OUTPUT_MAX_LENGTH = 5000
@@ -308,6 +316,119 @@ def summarize_free_text(value, limit=120):
     return text if len(text) <= limit else f"{text[:limit]}…"
 
 
+def normalize_pt_free_text(value):
+    return str(value or "").strip()
+
+
+def build_pt_free_text_instruction(is_reevaluation=False):
+    if is_reevaluation:
+        return """【PT自由記載の取扱い】
+・PT自由記載には、客観的な補足評価結果と、PTが明示した解釈・原因仮説が混在する可能性があります。客観的事実と明示された推論を区別して判断材料にしてください。
+・PTが測定・観察・確認した内容と患者本人から聴取した内容を区別し、患者申告をPTの客観所見へ変換せず、PTの観察所見を患者申告として扱わないでください。患者申告から新しい原因や解釈を作らないでください。
+・PT自由記載が「入力なし」の場合は、入力されていない推論を作らないでください。
+・原文より因果関係や確信度を強めず、推論を事実として断定しないでください。
+・数値、単位、左右、身体部位、検査名を変更せず、入力されていない所見や診断名を追加しないでください。
+・構造化入力とPT自由記載が矛盾する場合は、どちらかへ統合したり、片方を削除したりせず、矛盾を勝手に解決しないでください。
+・計画書更新結果には「補足評価結果」と「PT推論」の新しい見出しを追加せず、指定された11項目だけを出力してください。
+・【実施プログラム】には、計画書更新用カルテ内容に記載されていないプログラムを追加しないでください。"""
+
+    return """【PT自由記載の分類・文章化】
+・PT自由記載だけを、入力に明示されている範囲で「補足評価結果」と「PT推論」へ分類してください。
+・補足評価結果には、PTが測定・観察・確認した事実、実施した検査結果、姿勢・動作・歩行所見、触診所見、疼痛の誘発動作、数値、左右差、および患者本人から聴取した内容を記載してください。
+・PTが測定・観察・確認した内容は、測定所見・観察所見として「認めた」「確認した」などと記載してください。
+・患者本人から聴取した内容は、「患者は〜と訴えた」「〜との申告あり」など、患者申告であることが分かる文章にしてください。患者申告を「認めた」「確認した」などのPTによる客観所見へ変換せず、PTが観察した所見を患者申告として記載しないでください。
+・患者申告も入力されている内容だけを記載し、患者申告から新しい原因や解釈を作らないでください。患者申告に含まれる数値、単位、左右、身体部位、動作を変更してはいけません。
+・PT推論には、評価結果の解釈、所見同士の関連性、疼痛や動作障害の原因仮説、代償動作の解釈、機能障害と活動制限のつながりなど、入力者が明示した解釈・仮説だけを記載してください。
+・1つの文に事実と推論が混在する場合は、入力に明示されている範囲だけを分離してください。入力にない所見や因果関係を補ってはいけません。
+・各本文は箇条書きにせず、「・」「-」「1.」「①」などの記号を除去し、短文や単語のメモを簡潔で自然な文章へ整えてください。
+・推論は「可能性がある」「と考える」などの非断定的な表現にしてください。原文より因果関係や確信度を強めてはいけません。
+・関係が不明な内容を無理につなげず、無関係な内容は別の文にしてください。文章を過度に膨らませてはいけません。
+・数値、単位、左右、身体部位、検査名を変更せず、入力されていない所見・診断名・因果関係を追加しないでください。
+・構造化入力とPT自由記載が矛盾する場合は、どちらかへ統合したり、片方を削除したりせず、矛盾を勝手に解決しないでください。
+・既存の構造化評価と重複する内容を「補足評価結果」へ不必要に繰り返さないでください。
+・PT自由記載が「入力なし」の場合は、「補足評価結果：」と「PT推論：」を出力せず、新しいPT推論を作らないでください。既存の理学療法評価、問題点、目標、治療方針は従来どおり作成してください。
+・客観的内容だけの場合は「補足評価結果：」だけ、推論だけの場合は「PT推論：」だけ、両方ある場合は両方を出力してください。内容のない見出しや「特記なし」を出力してはいけません。
+・新しい見出しは、既存の構造化評価項目と「理学療法評価：」の後、「優先的問題点：」の前、かつ「【計画書用】」より前に配置してください。
+・新しい見出しも「項目名：」を単独行とし、本文の各行は全角スペース1つで字下げしてください。項目間に空行を入れないでください。
+・患者申告の出力例：入力が「階段を降りるときに右膝が抜けそうになるとのこと」の場合は、「補足評価結果：」へ「　患者は、階段降段時に右膝が抜けそうになる感覚を訴えた。」と記載し、「階段降段時に右膝の不安定性を認めた。」という客観所見へ変換してはいけません。
+・出力例：入力が「右立脚期が短く、股関節痛を避けていると思う」の場合は、「補足評価結果：」へ「　歩行では右立脚期の短縮を認めた。」、「PT推論：」へ「　右股関節痛を回避するため、右立脚時間が短縮している可能性がある。」と分けてください。"""
+
+
+def _find_colon_heading(text, heading):
+    if not text:
+        return None
+    normalized_heading = str(heading or "").strip().rstrip("：:")
+    if not normalized_heading:
+        return None
+    return re.search(
+        rf"^[ \t]*{re.escape(normalized_heading)}[：:][ \t]*(?=\r?$)",
+        str(text),
+        re.MULTILINE,
+    )
+
+
+def extract_colon_heading_body(text, heading):
+    """Extract an unindented colon-heading body, returning None when absent."""
+    heading_match = _find_colon_heading(text, heading)
+    if heading_match is None:
+        return None
+
+    remaining_text = str(text)[heading_match.end():]
+    next_heading_match = UNINDENTED_OUTPUT_HEADING_PATTERN.search(remaining_text)
+    if next_heading_match is not None:
+        remaining_text = remaining_text[:next_heading_match.start()]
+    return remaining_text.strip()
+
+
+def contains_bullet_only_content(text):
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    return bool(lines) and all(BULLET_LINE_PATTERN.match(line) for line in lines)
+
+
+def _find_rehabilitation_plan_start(response_text):
+    for match in BRACKETED_HEADING_PATTERN.finditer(response_text or ""):
+        if match.group(1).strip() in REHABILITATION_PLAN_HEADINGS:
+            return match.start()
+    return None
+
+
+def validate_pt_free_text_output(response_text, has_pt_free_text):
+    """Return structural warnings without judging clinical classification quality."""
+    response_text = str(response_text or "")
+    heading_details = {
+        heading: (_find_colon_heading(response_text, heading), extract_colon_heading_body(response_text, heading))
+        for heading in PT_FREE_TEXT_OUTPUT_HEADINGS
+    }
+
+    if not has_pt_free_text:
+        return [
+            f"{heading}（PT自由記載なし）"
+            for heading, (heading_match, _) in heading_details.items()
+            if heading_match is not None
+        ]
+
+    warnings = []
+    present_headings = [
+        heading
+        for heading, (heading_match, _) in heading_details.items()
+        if heading_match is not None
+    ]
+    if not present_headings:
+        warnings.append("補足評価結果またはPT推論")
+        return warnings
+
+    plan_start = _find_rehabilitation_plan_start(response_text)
+    for heading in present_headings:
+        heading_match, body = heading_details[heading]
+        if plan_start is not None and heading_match.start() > plan_start:
+            warnings.append(f"{heading}（計画書部分より前）")
+        if not body:
+            warnings.append(f"{heading}（本文なし）")
+        elif contains_bullet_only_content(body):
+            warnings.append(f"{heading}（文章形式）")
+    return warnings
+
+
 def extract_rehabilitation_plan_section(response_text):
     """Return the unchanged rehabilitation-plan portion of a Japanese AI response."""
     if not response_text:
@@ -405,7 +526,13 @@ def count_program_items(response_text):
     return len(PROGRAM_ITEM_PATTERN.findall(section_body))
 
 
-def validate_ai_output(response_text, is_reevaluation, require_balance=False):
+def validate_ai_output(
+    response_text,
+    is_reevaluation,
+    require_balance=False,
+    has_pt_free_text=False,
+):
+    response_text = str(response_text or "")
     requirements = REEVALUATION_OUTPUT_REQUIREMENTS if is_reevaluation else INITIAL_OUTPUT_REQUIREMENTS
     missing_items = [
         item_name
@@ -421,6 +548,10 @@ def validate_ai_output(response_text, is_reevaluation, require_balance=False):
             missing_items.append("実施プログラム（5行以内）")
     elif require_balance and "バランス評価" not in response_text:
         missing_items.append("バランス評価")
+    if not is_reevaluation:
+        missing_items.extend(
+            validate_pt_free_text_output(response_text, has_pt_free_text)
+        )
     output_length = len(response_text.strip())
     return missing_items, output_length < OUTPUT_MIN_LENGTH, output_length > OUTPUT_MAX_LENGTH
 
