@@ -1,7 +1,10 @@
 import unittest
 
 from pt_app_utils import LAXITY_MAX_SCORE
+from pt_app_utils import MMT_MYOTOME_MAP
+from pt_app_utils import NECK_MMT_ITEMS
 from pt_app_utils import PLAN_TRANSLATION_LANGUAGES
+from pt_app_utils import ROM_REFERENCE_VALUES
 from pt_app_utils import build_balance_assessment_lines
 from pt_app_utils import build_plan_translation_prompt
 from pt_app_utils import build_pt_free_text_instruction
@@ -15,12 +18,93 @@ from pt_app_utils import classify_single_leg_stance_reference
 from pt_app_utils import classify_tug_reference
 from pt_app_utils import detect_potential_personal_information
 from pt_app_utils import contains_bullet_only_content
+from pt_app_utils import count_fullwidth_priority_problem_items
+from pt_app_utils import count_priority_problem_items
 from pt_app_utils import extract_colon_heading_body
 from pt_app_utils import extract_rehabilitation_plan_section
 from pt_app_utils import format_grip_strength_items
+from pt_app_utils import format_mmt_display_name
+from pt_app_utils import format_rom_display_name
 from pt_app_utils import is_plan_translation_usable
 from pt_app_utils import normalize_pt_free_text
 from pt_app_utils import validate_ai_output
+from pt_app_utils import validate_physical_therapy_evaluation
+
+
+class RomAndMmtDisplayTests(unittest.TestCase):
+    def test_formats_rom_reference_values(self):
+        self.assertEqual(format_rom_display_name("屈曲", 125), "屈曲（125°）")
+        self.assertEqual(format_rom_display_name("伸展", 0), "伸展（0°）")
+
+    def test_rom_items_without_references_have_no_parentheses(self):
+        for item in ("SLR", "CV角", "内旋(結帯)"):
+            with self.subTest(item=item):
+                self.assertEqual(format_rom_display_name(item, None), item)
+
+    def test_zero_reference_is_not_treated_as_none(self):
+        self.assertEqual(format_rom_display_name("伸展", 0), "伸展（0°）")
+        self.assertNotEqual(format_rom_display_name("伸展", 0), "伸展")
+
+    def test_updated_official_rom_references(self):
+        self.assertEqual(ROM_REFERENCE_VALUES["腰部"]["右側屈"], 50)
+        self.assertEqual(ROM_REFERENCE_VALUES["腰部"]["左側屈"], 50)
+        self.assertEqual(ROM_REFERENCE_VALUES["腰部"]["右回旋"], 40)
+        self.assertEqual(ROM_REFERENCE_VALUES["腰部"]["左回旋"], 40)
+        self.assertEqual(ROM_REFERENCE_VALUES["手指"]["MP伸展"], 45)
+
+    def test_hip_rom_contains_knee_ankle_and_slr_items(self):
+        hip_rom = ROM_REFERENCE_VALUES["股関節"]
+        for item in (
+            "膝関節屈曲",
+            "膝関節伸展",
+            "足関節背屈",
+            "足関節底屈",
+            "SLR",
+        ):
+            with self.subTest(item=item):
+                self.assertIn(item, hip_rom)
+        self.assertIsNone(hip_rom["SLR"])
+
+    def test_knee_rom_contains_hip_ankle_and_slr_items(self):
+        knee_rom = ROM_REFERENCE_VALUES["膝関節"]
+        for item in (
+            "股関節屈曲",
+            "股関節伸展",
+            "股関節外転",
+            "股関節内転",
+            "股関節外旋",
+            "股関節内旋",
+            "足関節背屈",
+            "足関節底屈",
+            "SLR",
+        ):
+            with self.subTest(item=item):
+                self.assertIn(item, knee_rom)
+
+    def test_formats_mmt_myotome_labels(self):
+        self.assertEqual(
+            format_mmt_display_name("上腕二頭筋"),
+            "上腕二頭筋（C5-C6、主にC5）",
+        )
+        self.assertEqual(
+            format_mmt_display_name("上腕三頭筋"),
+            "上腕三頭筋（C6-C8、主にC7）",
+        )
+        self.assertEqual(
+            format_mmt_display_name("大腿四頭筋"),
+            "大腿四頭筋（L2-L4、主にL3）",
+        )
+
+    def test_unknown_muscle_keeps_original_name(self):
+        self.assertEqual(format_mmt_display_name("未登録筋"), "未登録筋")
+
+    def test_myotome_labels_do_not_change_internal_muscle_keys(self):
+        self.assertIn("上腕三頭筋", MMT_MYOTOME_MAP)
+        self.assertNotIn("上腕三頭筋（C6-C8、主にC7）", MMT_MYOTOME_MAP)
+
+    def test_neck_mmt_contains_bilateral_triceps_item(self):
+        self.assertIn("上腕三頭筋", NECK_MMT_ITEMS)
+        self.assertNotEqual(NECK_MMT_ITEMS[0], "上腕三頭筋")
 
 
 class PrivacyDetectionTests(unittest.TestCase):
@@ -55,9 +139,9 @@ class OutputValidationTests(unittest.TestCase):
 【感覚異常について】しびれ残存
 【可動域について】可動域改善
 【優先的問題点】
-1. 動作時痛の残存
-2. 下肢筋力低下
-3. 歩行耐久性低下
+＃1 動作時痛の残存
+＃2 下肢筋力低下
+＃3 歩行耐久性低下
 【短期目標】屋内歩行の安定
 【長期目標】買い物動作の再獲得
 【治療方針】筋力と歩行能力の改善
@@ -86,15 +170,17 @@ class OutputValidationTests(unittest.TestCase):
             "【計画書用】\n【短期目標】疼痛軽減\n【長期目標】屋外歩行\n"
             "【治療方針】機能改善\n【治療内容】可動域練習"
         )
+        assessment_section = (
+            "理学療法評価：\n　" + ("あ" * 150) + "\n"
+            "優先的問題点：\n　＃1 疼痛\n　＃2 筋力低下\n　＃3 歩行制限\n"
+        )
         old_layout = (
             "【電子カルテ用】\n疼痛：安静時0\n関節可動域：制限なし\n"
-            "筋力：MMT5\nADL：自立\n優先的問題点：特記なし\n"
-            f"{plan_section}"
+            f"筋力：MMT5\nADL：自立\n{assessment_section}{plan_section}"
         )
         new_layout = (
             "【電子カルテ用】\n疼痛：\n　安静時0\n関節可動域：\n　制限なし\n"
-            "筋力：\n　MMT5\nADL：\n　自立\n優先的問題点：\n　・特記なし\n"
-            f"{plan_section}"
+            f"筋力：\n　MMT5\nADL：\n　自立\n{assessment_section}{plan_section}"
         )
         for response_text in (old_layout, new_layout):
             with self.subTest(response_text=response_text):
@@ -110,14 +196,14 @@ class OutputValidationTests(unittest.TestCase):
 
     def test_detects_missing_reevaluation_priority_problems(self):
         response_text = self.REEVALUATION_OUTPUT.replace(
-            "【優先的問題点】\n1. 動作時痛の残存\n2. 下肢筋力低下\n3. 歩行耐久性低下\n",
+            "【優先的問題点】\n＃1 動作時痛の残存\n＃2 下肢筋力低下\n＃3 歩行耐久性低下\n",
             "",
         )
         missing_items, _, _ = validate_ai_output(response_text, is_reevaluation=True)
         self.assertIn("優先的問題点", missing_items)
 
     def test_detects_priority_problem_count_other_than_three(self):
-        response_text = self.REEVALUATION_OUTPUT.replace("3. 歩行耐久性低下\n", "")
+        response_text = self.REEVALUATION_OUTPUT.replace("＃3 歩行耐久性低下\n", "")
         missing_items, _, _ = validate_ai_output(response_text, is_reevaluation=True)
         self.assertIn("優先的問題点（3項目）", missing_items)
 
@@ -163,22 +249,22 @@ class OutputValidationTests(unittest.TestCase):
         missing_items, _, _ = validate_ai_output(response_text, is_reevaluation=True)
         self.assertIn("実施プログラム（5行以内）", missing_items)
 
-    def test_initial_validation_does_not_require_reevaluation_additions(self):
+    def test_initial_validation_requires_three_priority_problems(self):
         response_text = "電子カルテ用 評価結果 問題点 短期目標 長期目標 治療方針 治療内容"
         missing_items, _, _ = validate_ai_output(response_text, is_reevaluation=False)
-        self.assertNotIn("優先的問題点", missing_items)
-        self.assertNotIn("優先的問題点（3項目）", missing_items)
+        self.assertIn("優先的問題点（3項目）", missing_items)
         self.assertNotIn("実施プログラム", missing_items)
         self.assertNotIn("実施プログラム（5行以内）", missing_items)
 
 
-class PTFreeTextOutputTests(unittest.TestCase):
-    INITIAL_OUTPUT_PREFIX = """【電子カルテ用】
-理学療法評価：
-　構造化評価を統合した。
-"""
+class PhysicalTherapyEvaluationTests(unittest.TestCase):
+    INITIAL_OUTPUT_PREFIX = (
+        "【電子カルテ用】\n理学療法評価：\n　" + ("あ" * 150) + "\n"
+    )
     INITIAL_OUTPUT_SUFFIX = """優先的問題点：
-　・歩行能力低下
+　＃1 動作時痛
+　＃2 筋力低下
+　＃3 歩行能力低下
 【標準算定期限】：2026/12/28
 【リハビリ期限】：2026/12/28
 【計画書用】
@@ -189,12 +275,12 @@ class PTFreeTextOutputTests(unittest.TestCase):
 【治療内容】①歩行練習
 """
 
-    def initial_output(self, pt_sections=""):
-        return self.INITIAL_OUTPUT_PREFIX + pt_sections + self.INITIAL_OUTPUT_SUFFIX
+    def initial_output(self, extra_sections=""):
+        return self.INITIAL_OUTPUT_PREFIX + extra_sections + self.INITIAL_OUTPUT_SUFFIX
 
-    def validate_initial(self, pt_sections="", has_pt_free_text=True):
+    def validate_initial(self, extra_sections="", has_pt_free_text=True):
         missing_items, _, _ = validate_ai_output(
-            self.initial_output(pt_sections),
+            self.initial_output(extra_sections),
             is_reevaluation=False,
             has_pt_free_text=has_pt_free_text,
         )
@@ -293,70 +379,71 @@ class PTFreeTextOutputTests(unittest.TestCase):
                 self.assertFalse(bool(normalize_pt_free_text(value)))
         self.assertEqual(normalize_pt_free_text(" 右立脚期短縮 "), "右立脚期短縮")
 
-    def test_findings_only_passes_validation(self):
+    def test_deprecated_findings_heading_warns(self):
         warnings = self.validate_initial("補足評価結果：\n　右立脚期の短縮を認めた。\n")
-        self.assertEqual(warnings, [])
+        self.assertIn("補足評価結果（廃止見出し）", warnings)
 
-    def test_reasoning_only_passes_validation(self):
+    def test_deprecated_pt_reasoning_heading_warns(self):
         warnings = self.validate_initial("PT推論：\n　疼痛回避の可能性がある。\n")
-        self.assertEqual(warnings, [])
+        self.assertIn("PT推論（廃止見出し）", warnings)
 
-    def test_both_sections_pass_validation(self):
+    def test_both_deprecated_headings_warn(self):
         warnings = self.validate_initial(
             "補足評価結果：\n　右立脚期の短縮を認めた。\n"
             "PT推論：\n　疼痛回避の可能性がある。\n"
         )
+        self.assertIn("補足評価結果（廃止見出し）", warnings)
+        self.assertIn("PT推論（廃止見出し）", warnings)
+
+    def test_deprecated_headings_are_not_required(self):
+        warnings = self.validate_initial()
         self.assertEqual(warnings, [])
 
-    def test_warns_when_both_sections_are_missing(self):
-        warnings = self.validate_initial()
-        self.assertIn("補足評価結果またはPT推論", warnings)
-
-    def test_warns_for_empty_findings_body(self):
+    def test_empty_deprecated_findings_heading_warns(self):
         warnings = self.validate_initial(
             "補足評価結果：\nPT推論：\n　疼痛回避の可能性がある。\n"
         )
-        self.assertIn("補足評価結果（本文なし）", warnings)
+        self.assertIn("補足評価結果（廃止見出し）", warnings)
 
-    def test_warns_for_empty_reasoning_body(self):
+    def test_empty_deprecated_reasoning_heading_warns(self):
         warnings = self.validate_initial("PT推論：\n")
-        self.assertIn("PT推論（本文なし）", warnings)
+        self.assertIn("PT推論（廃止見出し）", warnings)
 
-    def test_warns_when_section_is_after_plan(self):
+    def test_deprecated_heading_after_plan_still_warns(self):
         response_text = self.initial_output() + "PT推論：\n　疼痛回避の可能性がある。\n"
         warnings, _, _ = validate_ai_output(
             response_text,
             is_reevaluation=False,
             has_pt_free_text=True,
         )
-        self.assertIn("PT推論（計画書部分より前）", warnings)
+        self.assertIn("PT推論（廃止見出し）", warnings)
 
-    def test_warns_for_bullet_only_body(self):
+    def test_deprecated_bullet_reasoning_heading_warns(self):
         warnings = self.validate_initial("PT推論：\n　・疼痛回避\n　・筋力低下の影響\n")
-        self.assertIn("PT推論（文章形式）", warnings)
+        self.assertIn("PT推論（廃止見出し）", warnings)
 
-    def test_natural_paragraph_does_not_warn(self):
+    def test_deprecated_natural_reasoning_heading_still_warns(self):
         warnings = self.validate_initial(
             "PT推論：\n　疼痛回避により歩幅が短縮している可能性がある。\n"
         )
-        self.assertNotIn("PT推論（文章形式）", warnings)
+        self.assertIn("PT推論（廃止見出し）", warnings)
 
     def test_no_free_text_and_no_new_headings_does_not_warn(self):
         self.assertEqual(self.validate_initial(has_pt_free_text=False), [])
 
-    def test_no_free_text_warns_for_generated_findings(self):
+    def test_no_free_text_still_warns_for_deprecated_findings(self):
         warnings = self.validate_initial(
             "補足評価結果：\n　右立脚期の短縮を認めた。\n",
             has_pt_free_text=False,
         )
-        self.assertIn("補足評価結果（PT自由記載なし）", warnings)
+        self.assertIn("補足評価結果（廃止見出し）", warnings)
 
-    def test_no_free_text_warns_for_generated_reasoning(self):
+    def test_no_free_text_still_warns_for_deprecated_reasoning(self):
         warnings = self.validate_initial(
             "PT推論：\n　疼痛回避の可能性がある。\n",
             has_pt_free_text=False,
         )
-        self.assertIn("PT推論（PT自由記載なし）", warnings)
+        self.assertIn("PT推論（廃止見出し）", warnings)
 
     def test_physical_therapy_assessment_alone_is_allowed_without_free_text(self):
         warnings = self.validate_initial(has_pt_free_text=False)
@@ -368,7 +455,8 @@ class PTFreeTextOutputTests(unittest.TestCase):
             is_reevaluation=True,
             has_pt_free_text=True,
         )
-        self.assertNotIn("補足評価結果またはPT推論", warnings)
+        self.assertNotIn("補足評価結果（廃止見出し）", warnings)
+        self.assertNotIn("PT推論（廃止見出し）", warnings)
 
     def test_none_and_empty_output_are_safe(self):
         for response_text in (None, ""):
@@ -378,22 +466,119 @@ class PTFreeTextOutputTests(unittest.TestCase):
                     is_reevaluation=False,
                     has_pt_free_text=True,
                 )
-                self.assertIn("補足評価結果またはPT推論", warnings)
+                self.assertIn("理学療法評価", warnings)
+
+    def test_extracts_physical_therapy_evaluation_body(self):
+        text = "理学療法評価：\n　疼痛と歩行制限の関連が考えられる。\n優先的問題点：\n　＃1 疼痛"
+        self.assertEqual(
+            extract_colon_heading_body(text, "理学療法評価"),
+            "疼痛と歩行制限の関連が考えられる。",
+        )
+
+    def test_physical_therapy_evaluation_length_boundaries(self):
+        for length in (150, 200, 250):
+            with self.subTest(length=length):
+                warnings = validate_physical_therapy_evaluation(
+                    f"理学療法評価：\n　{'あ' * length}\n【計画書用】\n【短期目標】改善"
+                )
+                self.assertNotIn("理学療法評価（150～250文字）", warnings)
+
+    def test_physical_therapy_evaluation_length_outside_range_warns(self):
+        for length in (149, 251):
+            with self.subTest(length=length):
+                warnings = validate_physical_therapy_evaluation(
+                    f"理学療法評価：\n　{'あ' * length}\n【計画書用】\n【短期目標】改善"
+                )
+                self.assertIn("理学療法評価（150～250文字）", warnings)
+
+    def test_empty_or_missing_physical_therapy_evaluation_warns(self):
+        empty_warnings = validate_physical_therapy_evaluation(
+            "理学療法評価：\n【計画書用】\n【短期目標】改善"
+        )
+        self.assertIn("理学療法評価（本文なし）", empty_warnings)
+        self.assertIn("理学療法評価", validate_physical_therapy_evaluation(""))
+
+    def test_physical_therapy_evaluation_after_plan_warns(self):
+        warnings = validate_physical_therapy_evaluation(
+            "【計画書用】\n【短期目標】改善\n理学療法評価：\n　" + ("あ" * 150)
+        )
+        self.assertIn("理学療法評価（計画書部分より前）", warnings)
+
+    def test_bullet_only_physical_therapy_evaluation_warns(self):
+        warnings = validate_physical_therapy_evaluation(
+            "理学療法評価：\n　・疼痛\n　・筋力低下\n【計画書用】\n【短期目標】改善"
+        )
+        self.assertIn("理学療法評価（文章形式）", warnings)
+
+    def test_natural_physical_therapy_evaluation_does_not_warn_for_format(self):
+        warnings = validate_physical_therapy_evaluation(
+            "理学療法評価：\n　" + ("疼痛と歩行制限の関連が考えられる。" * 10) + "\n【計画書用】"
+        )
+        self.assertNotIn("理学療法評価（文章形式）", warnings)
+
+    def test_clinical_reasoning_deprecated_heading_warns(self):
+        warnings = self.validate_initial("臨床推論：\n　疼痛回避の可能性がある。\n")
+        self.assertIn("臨床推論（廃止見出し）", warnings)
+
+    def test_inline_deprecated_heading_warns(self):
+        warnings = self.validate_initial("PT推論：疼痛回避の可能性がある。\n")
+        self.assertIn("PT推論（廃止見出し）", warnings)
+
+    def test_priority_problem_formats_are_counted_for_backwards_compatibility(self):
+        for items in (
+            "＃1 疼痛\n＃2 筋力低下\n＃3 歩行制限",
+            "#1 疼痛\n#2 筋力低下\n#3 歩行制限",
+            "1. 疼痛\n2. 筋力低下\n3. 歩行制限",
+            "① 疼痛\n② 筋力低下\n③ 歩行制限",
+            "・疼痛\n・筋力低下\n・歩行制限",
+        ):
+            with self.subTest(items=items):
+                response_text = f"優先的問題点：\n{items}\n【計画書用】"
+                self.assertEqual(count_priority_problem_items(response_text), 3)
+
+    def test_new_priority_problem_format_requires_fullwidth_hash(self):
+        fullwidth_text = "優先的問題点：\n＃1 疼痛\n＃2 筋力低下\n＃3 歩行制限\n【計画書用】"
+        legacy_text = "優先的問題点：\n1. 疼痛\n2. 筋力低下\n3. 歩行制限\n【計画書用】"
+        self.assertEqual(count_fullwidth_priority_problem_items(fullwidth_text), 3)
+        self.assertEqual(count_fullwidth_priority_problem_items(legacy_text), 0)
+
+    def test_duplicate_fullwidth_priority_numbers_warn(self):
+        response_text = self.initial_output().replace(
+            "＃1 動作時痛\n　＃2 筋力低下\n　＃3 歩行能力低下",
+            "＃1 動作時痛\n＃1 筋力低下\n＃1 歩行能力低下",
+        )
+        warnings, _, _ = validate_ai_output(response_text, is_reevaluation=False)
+        self.assertIn("優先的問題点（＃1～＃3形式）", warnings)
+
+    def test_two_or_four_priority_problems_warn(self):
+        for items in (
+            "＃1 疼痛\n＃2 筋力低下",
+            "＃1 疼痛\n＃2 筋力低下\n＃3 歩行制限\n＃4 ADL制限",
+        ):
+            with self.subTest(items=items):
+                response_text = self.initial_output().replace(
+                    "＃1 動作時痛\n　＃2 筋力低下\n　＃3 歩行能力低下",
+                    items,
+                )
+                warnings, _, _ = validate_ai_output(response_text, is_reevaluation=False)
+                self.assertIn("優先的問題点（3項目）", warnings)
 
     def test_prompt_instructions_cover_initial_and_reevaluation_modes(self):
         initial_instruction = build_pt_free_text_instruction(is_reevaluation=False)
-        self.assertIn("補足評価結果", initial_instruction)
-        self.assertIn("PT推論", initial_instruction)
-        self.assertIn("箇条書きにせず", initial_instruction)
-        self.assertIn("【計画書用】", initial_instruction)
-        self.assertIn("患者申告であることが分かる文章", initial_instruction)
-        self.assertIn("客観所見へ変換せず", initial_instruction)
-        self.assertIn("患者申告から新しい原因や解釈を作らない", initial_instruction)
-        self.assertIn("階段降段時に右膝が抜けそうになる感覚を訴えた", initial_instruction)
+        self.assertIn("該当する既存の評価項目へ統合", initial_instruction)
+        self.assertIn("独立見出しは出力してはいけません", initial_instruction)
+        self.assertIn("理学療法評価", initial_instruction)
+        self.assertIn("原則150～250文字", initial_instruction)
+        self.assertIn("患者申告", initial_instruction)
+        self.assertIn("重複して記載しない", initial_instruction)
+        self.assertIn("箇条書きや短文メモ", initial_instruction)
+        self.assertIn("数値、単位、左右", initial_instruction)
+        self.assertIn("＃1", initial_instruction)
 
         reevaluation_instruction = build_pt_free_text_instruction(is_reevaluation=True)
         self.assertIn("指定された11項目だけ", reevaluation_instruction)
-        self.assertIn("新しい見出しを追加せず", reevaluation_instruction)
+        self.assertIn("独立見出しを追加せず", reevaluation_instruction)
+        self.assertIn("＃1", reevaluation_instruction)
 
 
 class PlanTranslationTests(unittest.TestCase):
@@ -425,6 +610,15 @@ class PlanTranslationTests(unittest.TestCase):
         self.assertEqual(extracted, plan_text)
         self.assertNotIn("補足評価結果", extracted)
         self.assertNotIn("PT推論", extracted)
+
+    def test_physical_therapy_evaluation_is_excluded_from_plan_extraction(self):
+        plan_text = "【計画書用】\n【疼痛について】動作時痛あり\n【短期目標】屋内歩行安定"
+        response_text = (
+            "【電子カルテ用】\n"
+            "理学療法評価：\n　疼痛が歩行へ影響している可能性がある。\n"
+            f"{plan_text}"
+        )
+        self.assertEqual(extract_rehabilitation_plan_section(response_text), plan_text)
 
     def test_stops_before_next_major_heading(self):
         response_text = (
