@@ -2,6 +2,156 @@ import math
 import re
 
 
+ROM_REFERENCE_VALUES = {
+    "頸部": {
+        "屈曲": 60,
+        "伸展": 50,
+        "右側屈": 50,
+        "左側屈": 50,
+        "右回旋": 60,
+        "左回旋": 60,
+        "CV角": None,
+    },
+    "腰部": {
+        "屈曲": 45,
+        "伸展": 30,
+        "右側屈": 50,
+        "左側屈": 50,
+        "右回旋": 40,
+        "左回旋": 40,
+        "股関節屈曲": 125,
+        "股関節伸展": 15,
+        "股関節外転": 45,
+        "股関節内転": 20,
+        "股関節外旋": 45,
+        "股関節内旋": 45,
+        "膝関節屈曲": 130,
+        "膝関節伸展": 0,
+        "足関節背屈": 20,
+        "足関節底屈": 45,
+    },
+    "肩関節": {
+        "屈曲": 180,
+        "伸展": 50,
+        "外転": 180,
+        "内転": 0,
+        "外旋(1st)": 60,
+        "外旋(2nd)": 90,
+        "外旋(3rd)": None,
+        "内旋(結帯)": None,
+    },
+    "肘関節": {
+        "屈曲": 145,
+        "伸展": 5,
+        "回外": 90,
+        "回内": 90,
+        "外反": None,
+    },
+    "手関節": {
+        "掌屈": 90,
+        "背屈": 70,
+        "橈屈": 25,
+        "尺屈": 55,
+        "母指橈側外転": 60,
+        "母指掌側外転": 90,
+        "母指対立": None,
+    },
+    "手指": {
+        "MP屈曲": 90,
+        "MP伸展": 45,
+        "PIP屈曲": 100,
+        "PIP伸展": 0,
+        "DIP屈曲": 80,
+        "DIP伸展": 0,
+    },
+    "股関節": {
+        "屈曲": 125,
+        "伸展": 15,
+        "外転": 45,
+        "内転": 20,
+        "外旋": 45,
+        "内旋": 45,
+        "膝関節屈曲": 130,
+        "膝関節伸展": 0,
+        "足関節背屈": 20,
+        "足関節底屈": 45,
+        "SLR": None,
+    },
+    "膝関節": {
+        "股関節屈曲": 125,
+        "股関節伸展": 15,
+        "股関節外転": 45,
+        "股関節内転": 20,
+        "股関節外旋": 45,
+        "股関節内旋": 45,
+        "屈曲": 130,
+        "伸展": 0,
+        "足関節背屈": 20,
+        "足関節底屈": 45,
+        "SLR": None,
+    },
+    "足関節": {
+        "背屈": 20,
+        "底屈": 45,
+        "膝関節屈曲": 130,
+        "膝関節伸展": 0,
+        "SLR": None,
+    },
+}
+
+MMT_MYOTOME_MAP = {
+    "頚部伸筋群": "C2-C4",
+    "僧帽筋上部": "C3-C4・副神経",
+    "肩甲挙筋": "C3-C5",
+    "前鋸筋": "C5-C7",
+    "上腕二頭筋": "C5-C6、主にC5",
+    "上腕三頭筋": "C6-C8、主にC7",
+    "肩甲下筋": "C5-C6",
+    "上腕筋": "C5-C6",
+    "腕橈骨筋": "C5-C6、主にC6",
+    "棘上筋": "C5-C6",
+    "棘下筋": "C5-C6",
+    "小円筋": "C5-C6",
+    "三角筋(前・中・後)": "C5-C6",
+    "僧帽筋(上・中・下)": "C3-C4・副神経",
+    "円回内筋": "C6-C7",
+    "方形回内筋": "C8-Th1",
+    "回外筋": "C6-C7",
+    "手関節伸筋": "C6-C8、主にC6",
+    "手関節屈筋": "C6-Th1、主にC7",
+    "骨間筋": "C8-Th1、主にTh1",
+    "虫様筋": "C8-Th1",
+    "体幹屈筋群": "Th7-L1",
+    "体幹伸筋群": "Th1-L5、分節性",
+    "腹斜筋群": "Th7-L1",
+    "腸腰筋": "L1-L3、主にL2",
+    "大殿筋": "L5-S2",
+    "中殿筋": "L4-S1",
+    "大腿筋膜張筋": "L4-S1",
+    "ハムストリングス": "L5-S2",
+    "大腿四頭筋": "L2-L4、主にL3",
+    "前脛骨筋": "L4-L5、主にL4",
+    "長腓骨筋": "L5-S1",
+    "短腓骨筋": "L5-S1",
+    "第三腓骨筋": "L5-S1",
+    "下腿三頭筋": "S1-S2、主にS1",
+    "足趾屈筋": "L5-S2",
+    "足趾伸筋": "L5-S1、主にL5",
+}
+
+NECK_MMT_ITEMS = (
+    "頚部伸筋群",
+    "僧帽筋上部",
+    "肩甲挙筋",
+    "前鋸筋",
+    "上腕二頭筋",
+    "上腕三頭筋",
+    "肩甲下筋",
+    "上腕筋",
+    "腕橈骨筋",
+)
+
+
 PRIVACY_PATTERNS = {
     "電話番号": re.compile(
         r"(?<!\d)(?:\+81|0)[-\s]?\d{1,4}[-ー‐−\s]?\d{1,4}[-ー‐−\s]?\d{3,4}(?!\d)"
@@ -42,7 +192,11 @@ REEVALUATION_OUTPUT_REQUIREMENTS = {
 
 PRIORITY_PROBLEM_HEADINGS = ("優先的問題点", "優先順位の高い問題点", "主要問題点")
 PRIORITY_PROBLEM_ITEM_PATTERN = re.compile(
-    r"^\s*(?:[1-9１-９][\.．、\)]|[①②③④⑤⑥⑦⑧⑨])\s*\S+",
+    r"^\s*(?:[＃#][1-9１-９]|[1-9１-９][\.．、\)]|[①②③④⑤⑥⑦⑧⑨]|・)\s*\S+",
+    re.MULTILINE,
+)
+FULLWIDTH_PRIORITY_PROBLEM_ITEM_PATTERN = re.compile(
+    r"^\s*＃([1-9１-９])\s*\S+",
     re.MULTILINE,
 )
 PROGRAM_HEADINGS = ("実施プログラム", "実施内容", "治療プログラム")
@@ -94,10 +248,12 @@ UNINDENTED_OUTPUT_HEADING_PATTERN = re.compile(
 BULLET_LINE_PATTERN = re.compile(
     r"^(?:・\s*|[-*]\s+|[0-9０-９]+[.．、\)](?![0-9０-９])\s*|[①-⑳]\s*)\S"
 )
-PT_FREE_TEXT_OUTPUT_HEADINGS = ("補足評価結果", "PT推論")
+DEPRECATED_REASONING_HEADINGS = ("補足評価結果", "PT推論", "臨床推論")
 
 OUTPUT_MIN_LENGTH = 300
 OUTPUT_MAX_LENGTH = 5000
+PHYSICAL_THERAPY_EVALUATION_MIN_LENGTH = 150
+PHYSICAL_THERAPY_EVALUATION_MAX_LENGTH = 250
 LAXITY_MAX_SCORE = 7.0
 LOWER_LIMB_BALANCE_JOINTS = {"股関節", "膝関節", "足関節"}
 TUG_REFERENCE_CUTOFF_SECONDS = 13.5
@@ -118,6 +274,22 @@ def detect_potential_personal_information(text_fields):
 
 def format_measurement_value(value):
     return str(int(value)) if isinstance(value, (int, float)) else str(value)
+
+
+def format_rom_display_name(item, reference_value):
+    if reference_value is None:
+        return str(item)
+    if isinstance(reference_value, (int, float)) and float(reference_value).is_integer():
+        formatted_reference = str(int(reference_value))
+    else:
+        formatted_reference = str(reference_value)
+    return f"{item}（{formatted_reference}°）"
+
+
+def format_mmt_display_name(muscle_name, myotome_map=None):
+    mapping = MMT_MYOTOME_MAP if myotome_map is None else myotome_map
+    myotome = mapping.get(muscle_name)
+    return f"{muscle_name}（{myotome}）" if myotome else str(muscle_name)
 
 
 def format_grip_strength_items(right_strength, left_strength):
@@ -323,35 +495,34 @@ def normalize_pt_free_text(value):
 def build_pt_free_text_instruction(is_reevaluation=False):
     if is_reevaluation:
         return """【PT自由記載の取扱い】
-・PT自由記載には、客観的な補足評価結果と、PTが明示した解釈・原因仮説が混在する可能性があります。客観的事実と明示された推論を区別して判断材料にしてください。
-・PTが測定・観察・確認した内容と患者本人から聴取した内容を区別し、患者申告をPTの客観所見へ変換せず、PTの観察所見を患者申告として扱わないでください。患者申告から新しい原因や解釈を作らないでください。
+・PT自由記載には、客観的所見、患者申告、PTが明示した解釈・原因仮説が混在する可能性があります。これらを内部的に区別して判断材料にしてください。
+・「補足評価結果」「PT推論」「臨床推論」の独立見出しを追加せず、指定された11項目だけを出力してください。
+・優先的問題点は必ず3項目とし、各行を全角の「＃1」「＃2」「＃3」で開始してください。
+・PTが測定・観察・確認した内容と患者本人から聴取した内容を区別し、患者申告をPTの客観所見へ変換せず、PTの観察所見を患者申告として扱わないでください。
 ・PT自由記載が「入力なし」の場合は、入力されていない推論を作らないでください。
 ・原文より因果関係や確信度を強めず、推論を事実として断定しないでください。
 ・数値、単位、左右、身体部位、検査名を変更せず、入力されていない所見や診断名を追加しないでください。
 ・構造化入力とPT自由記載が矛盾する場合は、どちらかへ統合したり、片方を削除したりせず、矛盾を勝手に解決しないでください。
-・計画書更新結果には「補足評価結果」と「PT推論」の新しい見出しを追加せず、指定された11項目だけを出力してください。
 ・【実施プログラム】には、計画書更新用カルテ内容に記載されていないプログラムを追加しないでください。"""
 
-    return """【PT自由記載の分類・文章化】
-・PT自由記載だけを、入力に明示されている範囲で「補足評価結果」と「PT推論」へ分類してください。
-・補足評価結果には、PTが測定・観察・確認した事実、実施した検査結果、姿勢・動作・歩行所見、触診所見、疼痛の誘発動作、数値、左右差、および患者本人から聴取した内容を記載してください。
-・PTが測定・観察・確認した内容は、測定所見・観察所見として「認めた」「確認した」などと記載してください。
-・患者本人から聴取した内容は、「患者は〜と訴えた」「〜との申告あり」など、患者申告であることが分かる文章にしてください。患者申告を「認めた」「確認した」などのPTによる客観所見へ変換せず、PTが観察した所見を患者申告として記載しないでください。
-・患者申告も入力されている内容だけを記載し、患者申告から新しい原因や解釈を作らないでください。患者申告に含まれる数値、単位、左右、身体部位、動作を変更してはいけません。
-・PT推論には、評価結果の解釈、所見同士の関連性、疼痛や動作障害の原因仮説、代償動作の解釈、機能障害と活動制限のつながりなど、入力者が明示した解釈・仮説だけを記載してください。
-・1つの文に事実と推論が混在する場合は、入力に明示されている範囲だけを分離してください。入力にない所見や因果関係を補ってはいけません。
-・各本文は箇条書きにせず、「・」「-」「1.」「①」などの記号を除去し、短文や単語のメモを簡潔で自然な文章へ整えてください。
-・推論は「可能性がある」「と考える」などの非断定的な表現にしてください。原文より因果関係や確信度を強めてはいけません。
-・関係が不明な内容を無理につなげず、無関係な内容は別の文にしてください。文章を過度に膨らませてはいけません。
-・数値、単位、左右、身体部位、検査名を変更せず、入力されていない所見・診断名・因果関係を追加しないでください。
-・構造化入力とPT自由記載が矛盾する場合は、どちらかへ統合したり、片方を削除したりせず、矛盾を勝手に解決しないでください。
-・既存の構造化評価と重複する内容を「補足評価結果」へ不必要に繰り返さないでください。
-・PT自由記載が「入力なし」の場合は、「補足評価結果：」と「PT推論：」を出力せず、新しいPT推論を作らないでください。既存の理学療法評価、問題点、目標、治療方針は従来どおり作成してください。
-・客観的内容だけの場合は「補足評価結果：」だけ、推論だけの場合は「PT推論：」だけ、両方ある場合は両方を出力してください。内容のない見出しや「特記なし」を出力してはいけません。
-・新しい見出しは、既存の構造化評価項目と「理学療法評価：」の後、「優先的問題点：」の前、かつ「【計画書用】」より前に配置してください。
-・新しい見出しも「項目名：」を単独行とし、本文の各行は全角スペース1つで字下げしてください。項目間に空行を入れないでください。
-・患者申告の出力例：入力が「階段を降りるときに右膝が抜けそうになるとのこと」の場合は、「補足評価結果：」へ「　患者は、階段降段時に右膝が抜けそうになる感覚を訴えた。」と記載し、「階段降段時に右膝の不安定性を認めた。」という客観所見へ変換してはいけません。
-・出力例：入力が「右立脚期が短く、股関節痛を避けていると思う」の場合は、「補足評価結果：」へ「　歩行では右立脚期の短縮を認めた。」、「PT推論：」へ「　右股関節痛を回避するため、右立脚時間が短縮している可能性がある。」と分けてください。"""
+    return """【PT自由記載の統合と理学療法評価】
+・PT自由記載にある客観所見と患者申告は、「補足評価結果」という独立項目を作らず、該当する既存の評価項目へ統合してください。
+・疼痛・圧痛・疼痛誘発動作・疼痛の患者申告は「疼痛：」、追加ROM・筋短縮・End-Feel・FFD・SLR・Thomasテスト・Elyテストは「関節可動域：」、追加MMT・筋収縮・筋萎縮・握力・筋持久力は「筋力：」へ統合してください。
+・しびれ・感覚鈍麻・反射・筋緊張・神経症状は「感覚：」などの神経学的項目、片脚立位・TUG・SEBT・姿勢制御・動揺は「バランス評価：」、追加検査と陽性・陰性結果は「スペシャルテスト：」へ統合してください。
+・立脚期・歩幅・跛行・Trendelenburg徴候・Knee-in・立ち上がり・階段・代償動作は「動作観察：」、更衣・入浴・歩行・仕事・スポーツ・家事などの活動制限は「ADL：」へ統合してください。
+・明確な既存分類がない客観所見だけを「その他評価：」へ記載し、安易に使用しないでください。
+・構造化入力と自由記載の同じ所見は1つの項目内で自然な文章にまとめ、同じ所見を複数項目へ重複して記載しないでください。「補足評価」という名称を電子カルテへ残してはいけません。
+・PT自由記載の箇条書きや短文メモは、記号をそのまま残さず、内容を変えない範囲で該当項目内の簡潔で自然な文章へ整えてください。
+・患者本人から聴取した内容は「患者は〜と訴えた」「〜との申告あり」など情報源を保持し、患者申告をPTの観察所見へ変換せず、PTの観察所見を患者申告として扱わないでください。
+・数値、単位、左右、身体部位、動作、検査名を変更せず、入力されていない所見・診断名・因果関係を追加しないでください。
+・構造化入力と自由記載が矛盾する場合は勝手に統一せず、重要な場合は「入力内容間で所見の不一致あり」など事実だけを記載してください。
+・「補足評価結果：」「PT推論：」「臨床推論：」の独立見出しは出力してはいけません。
+・PT自由記載内の臨床推論は独立出力せず、疼痛、ROM、筋力、感覚、バランス、スペシャルテスト、姿勢・動作・歩行、ADL、患者申告と統合して、必ず「理学療法評価：」へ反映してください。
+・理学療法評価は本文約200文字、原則150～250文字の1つの自然な段落とし、箇条書きや所見の単純な羅列にしないでください。情報が少ない場合は無理に水増しせず、得られた情報の範囲で簡潔に記載してください。
+・重要な所見とADL・活動制限の関連を慎重に解釈し、「可能性がある」「影響していると考える」など非断定的に表現してください。原文より確信度を高めず、治療プログラムを細かく羅列しないでください。
+・PT自由記載が入力なしでも、測定された構造化評価を統合した理学療法評価を作成してください。未測定内容を推測してはいけません。
+・参考可動域は実測値ではなく、それだけで正常・異常を断定してはいけません。MMTに表示された髄節レベルを神経学的診断の確定根拠として扱ってはいけません。
+・理学療法評価の後に「優先的問題点：」を置き、必ず3行を全角の「＃1」「＃2」「＃3」で開始してください。"""
 
 
 def _find_colon_heading(text, heading):
@@ -392,40 +563,39 @@ def _find_rehabilitation_plan_start(response_text):
     return None
 
 
-def validate_pt_free_text_output(response_text, has_pt_free_text):
-    """Return structural warnings without judging clinical classification quality."""
+def validate_physical_therapy_evaluation(response_text):
+    """Return structural warnings without judging clinical validity."""
     response_text = str(response_text or "")
-    heading_details = {
-        heading: (_find_colon_heading(response_text, heading), extract_colon_heading_body(response_text, heading))
-        for heading in PT_FREE_TEXT_OUTPUT_HEADINGS
-    }
-
-    if not has_pt_free_text:
-        return [
-            f"{heading}（PT自由記載なし）"
-            for heading, (heading_match, _) in heading_details.items()
-            if heading_match is not None
-        ]
-
     warnings = []
-    present_headings = [
-        heading
-        for heading, (heading_match, _) in heading_details.items()
-        if heading_match is not None
-    ]
-    if not present_headings:
-        warnings.append("補足評価結果またはPT推論")
-        return warnings
+    heading_match = _find_colon_heading(response_text, "理学療法評価")
+    body = extract_colon_heading_body(response_text, "理学療法評価")
 
-    plan_start = _find_rehabilitation_plan_start(response_text)
-    for heading in present_headings:
-        heading_match, body = heading_details[heading]
+    if heading_match is None:
+        warnings.append("理学療法評価")
+    else:
+        plan_start = _find_rehabilitation_plan_start(response_text)
         if plan_start is not None and heading_match.start() > plan_start:
-            warnings.append(f"{heading}（計画書部分より前）")
+            warnings.append("理学療法評価（計画書部分より前）")
         if not body:
-            warnings.append(f"{heading}（本文なし）")
-        elif contains_bullet_only_content(body):
-            warnings.append(f"{heading}（文章形式）")
+            warnings.append("理学療法評価（本文なし）")
+        else:
+            if contains_bullet_only_content(body):
+                warnings.append("理学療法評価（文章形式）")
+            body_length = len(re.sub(r"\s+", "", body))
+            if not (
+                PHYSICAL_THERAPY_EVALUATION_MIN_LENGTH
+                <= body_length
+                <= PHYSICAL_THERAPY_EVALUATION_MAX_LENGTH
+            ):
+                warnings.append("理学療法評価（150～250文字）")
+
+    for heading in DEPRECATED_REASONING_HEADINGS:
+        if re.search(
+            rf"^[ \t]*{re.escape(heading)}[：:]",
+            response_text,
+            re.MULTILINE,
+        ):
+            warnings.append(f"{heading}（廃止見出し）")
     return warnings
 
 
@@ -519,6 +689,25 @@ def count_priority_problem_items(response_text):
     return len(PRIORITY_PROBLEM_ITEM_PATTERN.findall(section_body))
 
 
+def count_fullwidth_priority_problem_items(response_text):
+    section_body = extract_section_body(response_text, PRIORITY_PROBLEM_HEADINGS)
+    if section_body is None:
+        return None
+    return len(FULLWIDTH_PRIORITY_PROBLEM_ITEM_PATTERN.findall(section_body))
+
+
+def has_fullwidth_priority_problem_sequence(response_text):
+    section_body = extract_section_body(response_text, PRIORITY_PROBLEM_HEADINGS)
+    if section_body is None:
+        return False
+    numbers = FULLWIDTH_PRIORITY_PROBLEM_ITEM_PATTERN.findall(section_body)
+    normalized_numbers = [
+        number.translate(str.maketrans("１２３４５６７８９", "123456789"))
+        for number in numbers
+    ]
+    return normalized_numbers == ["1", "2", "3"]
+
+
 def count_program_items(response_text):
     section_body = extract_section_body(response_text, PROGRAM_HEADINGS)
     if section_body is None:
@@ -533,25 +722,28 @@ def validate_ai_output(
     has_pt_free_text=False,
 ):
     response_text = str(response_text or "")
+    _ = has_pt_free_text  # Retained for backwards-compatible callers.
     requirements = REEVALUATION_OUTPUT_REQUIREMENTS if is_reevaluation else INITIAL_OUTPUT_REQUIREMENTS
     missing_items = [
         item_name
         for item_name, markers in requirements.items()
         if not any(marker in response_text for marker in markers)
     ]
+    priority_problem_count = count_priority_problem_items(response_text)
+    if priority_problem_count != 3:
+        missing_items.append("優先的問題点（3項目）")
+    else:
+        if not has_fullwidth_priority_problem_sequence(response_text):
+            missing_items.append("優先的問題点（＃1～＃3形式）")
+
     if is_reevaluation:
-        priority_problem_count = count_priority_problem_items(response_text)
-        if priority_problem_count is not None and priority_problem_count != 3:
-            missing_items.append("優先的問題点（3項目）")
         program_count = count_program_items(response_text)
         if program_count is not None and program_count > 5:
             missing_items.append("実施プログラム（5行以内）")
-    elif require_balance and "バランス評価" not in response_text:
-        missing_items.append("バランス評価")
-    if not is_reevaluation:
-        missing_items.extend(
-            validate_pt_free_text_output(response_text, has_pt_free_text)
-        )
+    else:
+        if require_balance and "バランス評価" not in response_text:
+            missing_items.append("バランス評価")
+        missing_items.extend(validate_physical_therapy_evaluation(response_text))
     output_length = len(response_text.strip())
     return missing_items, output_length < OUTPUT_MIN_LENGTH, output_length > OUTPUT_MAX_LENGTH
 

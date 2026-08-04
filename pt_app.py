@@ -12,13 +12,17 @@ from pt_app_utils import calculate_sebt_composite_score
 from pt_app_utils import detect_potential_personal_information
 from pt_app_utils import extract_rehabilitation_plan_section
 from pt_app_utils import format_grip_strength_items
+from pt_app_utils import format_mmt_display_name
 from pt_app_utils import format_measurement_value
+from pt_app_utils import format_rom_display_name
 from pt_app_utils import is_plan_translation_usable
 from pt_app_utils import LAXITY_MAX_SCORE
 from pt_app_utils import LOWER_LIMB_BALANCE_JOINTS
 from pt_app_utils import normalize_pt_free_text
+from pt_app_utils import NECK_MMT_ITEMS
 from pt_app_utils import PLAN_TRANSLATION_LANGUAGES
 from pt_app_utils import response_may_be_blocked_by_safety
+from pt_app_utils import ROM_REFERENCE_VALUES
 from pt_app_utils import SEBT_ANTERIOR_ASYMMETRY_REFERENCE_CM
 from pt_app_utils import SEBT_COMPOSITE_REFERENCE_PERCENT
 from pt_app_utils import SINGLE_LEG_STANCE_REFERENCE_SECONDS
@@ -28,9 +32,9 @@ from pt_app_utils import TUG_REFERENCE_CUTOFF_SECONDS
 from pt_app_utils import validate_ai_output
 
 # アプリのバージョン情報
-APP_VERSION = "1.4.0"
-APP_UPDATED_DATE = "2026年7月31日"
-APP_UPDATE_SUMMARY = "補足評価結果とPT推論の自動整理を追加"
+APP_VERSION = "1.5.0"
+APP_UPDATED_DATE = "2026年8月4日"
+APP_UPDATE_SUMMARY = "ROM参考値・MMT髄節表示・理学療法評価を改善"
 
 # ページ設定
 st.set_page_config(page_title="理学療法評価AIアシスタント", layout="wide")
@@ -38,72 +42,93 @@ st.set_page_config(page_title="理学療法評価AIアシスタント", layout="
 # 関節ごとの評価項目定義
 JOINT_CONFIG = {
     "頸部": {
-        "rom": {"屈曲": 60, "伸展": 50, "右側屈": 50, "左側屈": 50, "右回旋": 60, "左回旋": 60, "CV角": 50},
-        "mmt": ["頚部伸筋群", "僧帽筋上部", "肩甲挙筋", "前鋸筋", "上腕二頭筋", "肩甲下筋", "上腕筋", "腕橈骨筋"],
+        "rom": ROM_REFERENCE_VALUES["頸部"],
+        "mmt": list(NECK_MMT_ITEMS),
         "sensory": ["C5", "C6", "C7", "C8", "Th1"],
         "special": ["Cervical Flexion-Rotation Test", "Spurlingテスト(右)", "Spurlingテスト(左)", "Jacksonテスト(右)", "Jacksonテスト(左)", "頸椎牽引テスト", "Hoffmann反射", "Trener反射", "足クローヌス", "Babisnki反射", "Adsonテスト", "Wrightテスト", "Edenテスト"],
         "check": ["前方頭位(FHP)", "胸椎後弯・肩甲骨外転位"]
     },
     "腰部": {
-        "rom": {
-            "屈曲": 45, "伸展": 30, "右側屈": 20, "左側屈": 20, "右回旋": 45, "左回旋": 45,
-            "股関節屈曲": 125, "股関節伸展": 15, "股関節外転": 45, "股関節内転": 20, "股関節外旋": 45, "股関節内旋": 45,
-            "膝関節屈曲": 130, "膝関節伸展": 0, "足関節背屈": 20, "足関節底屈": 45
-        },
+        "rom": ROM_REFERENCE_VALUES["腰部"],
         "mmt": ["体幹屈筋群", "体幹伸筋群", "腹斜筋群", "腸腰筋", "大殿筋", "中殿筋", "大腿筋膜張筋"],
         "sensory": ["L1", "L2", "L3", "L4", "L5", "S1", "S2"],
         "special": ["Active-SLR", "FNSテスト", "Kempテスト", "Newtonテスト", "Valsalvaテスト", "叩打痛"],
         "check": ["寝返り困難", "起き上がり困難", "立ち上がり困難", "長時間の座位困難", "間欠性跛行", "体幹の側方偏移"]
     },
     "肩関節": {
-        "rom": {"屈曲": 180, "伸展": 50, "外転": 180, "内転": 0, "外旋(1st)": 60, "外旋(2nd)": 90, "外旋(3rd)": 90, "内旋(結帯)": None},
+        "rom": ROM_REFERENCE_VALUES["肩関節"],
         "mmt": ["棘上筋", "棘下筋", "小円筋", "肩甲下筋", "三角筋(前・中・後)", "前鋸筋", "僧帽筋(上・中・下)"],
         "sensory": [],
         "special": ["Neerテスト", "Hawkins-Kennedy", "Drop Arm", "Painful arc(60-120°)", "Apprehension(前方)", "Apprehension(後方)", "Sulcus sign", "Speedテスト", "Yergasonテスト", "O'Brienテスト"],
         "check": ["洗濯物を干す困難", "着替え困難", "洗髪・洗体困難"]
     },
     "肘関節": {
-        "rom": {"屈曲": 145, "伸展": 5, "回外": 90, "回内": 90, "外反": 15},
+        "rom": ROM_REFERENCE_VALUES["肘関節"],
         "mmt": ["上腕二頭筋", "上腕三頭筋", "上腕筋", "腕橈骨筋", "円回内筋", "方形回内筋", "回外筋", "手関節伸筋", "手関節屈筋"],
         "sensory": [],
         "special": ["Thomsenテスト", "内側上顆炎テスト", "MCLストレス", "LCLストレス", "ピアノキーサイン", "Tinelサイン(肘部管)"],
         "check": ["食事困難", "洗顔困難", "洗髪困難", "生理的外反の左右差"]
     },
     "手関節": {
-        "rom": {"掌屈": 90, "背屈": 70, "橈屈": 25, "尺屈": 55, "母指橈側外転": 60, "母指掌側外転": 90, "母指対立": 0},
+        "rom": ROM_REFERENCE_VALUES["手関節"],
         "mmt": ["手関節屈筋", "手関節伸筋"],
         "sensory": [],
         "special": ["Phalenテスト", "逆Phalenテスト", "Tinelサイン(手根管)", "Tinelサイン(ギヨン管)", "Finkelsteinテスト", "Watsonテスト", "TFCC負荷テスト", "Allenテスト", "Fromentサイン"],
         "check": ["食事困難", "洗顔困難", "洗髪困難", "創部の癒着"]
     },
     "手指": {
-        "rom": {"MP屈曲": 90, "MP伸展": 0, "PIP屈曲": 100, "PIP伸展": 0, "DIP屈曲": 80, "DIP伸展": 0},
+        "rom": ROM_REFERENCE_VALUES["手指"],
         "mmt": ["骨間筋", "虫様筋"],
         "sensory": [],
         "special": ["Elsonテスト", "Bunnel-Littlerテスト", "Tinelサイン(指神経)", "Fromentサイン", "側方動揺性(MP/PIP/DIP)"],
         "check": ["ばね指(A1圧痛・弾発)", "マレット変形", "スワンネック変形", "ボタン穴変形", "ヘバーデン結節", "ブシャール結節", "浮腫・熱感", "食事困難", "書字困難"]
     },
     "股関節": {
-        "rom": {"屈曲": 125, "伸展": 15, "外転": 45, "内転": 20, "外旋": 45, "内旋": 45, "SLR": 70},
+        "rom": ROM_REFERENCE_VALUES["股関節"],
         "mmt": ["腸腰筋", "大殿筋", "中殿筋", "大腿筋膜張筋", "ハムストリングス"],
         "sensory": [],
         "special": ["FADIR", "後方インピンジメント", "FABER(Patrick)", "トレンドレンブルグ徴候", "デュシェンヌ徴候", "スクイーズテスト", "シットアップテスト", "アリスサイン", "テレスコーピング", "クレイグテスト"],
         "check": ["逃避性歩行", "跛行", "分回し歩行", "靴下の着脱困難", "爪切り困難", "脚長差", "骨盤代償"]
     },
     "膝関節": {
-        "rom": {"屈曲": 130, "伸展": 0, "足関節背屈": 20, "足関節底屈": 45, "SLR": 70},
+        "rom": ROM_REFERENCE_VALUES["膝関節"],
         "mmt": ["大腿四頭筋", "ハムストリングス", "大腿筋膜張筋", "中殿筋"],
         "sensory": [],
         "special": ["前方引き出し", "後方引き出し", "Lachman", "ピボットシフト", "内側側方動揺", "外側側方動揺", "McMurray", "Apley", "膝蓋跳動", "Grindテスト", "Apprehension", "Wilsonテスト"],
         "check": ["伸展ラグ", "Knee-in(スクワット)", "Knee-in(歩行)", "Lateral thrust", "階段昇降(下り)困難", "和式トイレ困難", "浮腫・熱感"]
     },
     "足関節": {
-        "rom": {"背屈": 20, "底屈": 45, "膝関節屈曲": 130, "膝関節伸展": 0, "SLR": 70},
+        "rom": ROM_REFERENCE_VALUES["足関節"],
         "mmt": ["前脛骨筋", "長腓骨筋", "短腓骨筋", "第三腓骨筋", "下腿三頭筋", "足趾屈筋", "足趾伸筋"],
         "sensory": [],
         "special": ["前方引き出し(ATFL)", "内反ストレス(CFL)", "外反ストレス(三角靭帯)", "トンプソンテスト", "スクイーズ(脛腓)", "衝突試験", "Tinelサイン(足根管)", "モートンテスト"],
         "check": ["蹴り出しの弱さ", "扁平足", "外反母趾", "内反小趾", "Toe-out", "階段下り困難", "しゃがみ込み困難"]
     }
+}
+
+ROM_GROUP_BY_ITEM = {
+    "股関節": {
+        **{item: "股関節" for item in ("屈曲", "伸展", "外転", "内転", "外旋", "内旋")},
+        **{item: "膝関節" for item in ("膝関節屈曲", "膝関節伸展")},
+        **{item: "足関節" for item in ("足関節背屈", "足関節底屈")},
+        "SLR": "その他",
+    },
+    "膝関節": {
+        **{
+            item: "股関節"
+            for item in (
+                "股関節屈曲",
+                "股関節伸展",
+                "股関節外転",
+                "股関節内転",
+                "股関節外旋",
+                "股関節内旋",
+            )
+        },
+        **{item: "膝関節" for item in ("屈曲", "伸展")},
+        **{item: "足関節" for item in ("足関節背屈", "足関節底屈")},
+        "SLR": "その他",
+    },
 }
 
 # スペシャルテストの説明文
@@ -325,13 +350,24 @@ EF_OPTIONS = ["骨", "靭帯", "筋", "軟部組織"]
 
 # ROM入力
 st.subheader("📐 関節可動域 (ROM)")
+st.caption(
+    "括弧内は、日本リハビリテーション医学会ほか"
+    "『関節可動域表示ならびに測定法（2022年4月改訂）』による参考可動域です。"
+    "正常・異常を断定する値ではなく、年齢、性別、測定肢位、左右差などを含めて判断してください。"
+)
+current_rom_group = None
 for item, ref in JOINT_CONFIG[joint]["rom"].items():
+    rom_group = ROM_GROUP_BY_ITEM.get(joint, {}).get(item)
+    if rom_group is not None and rom_group != current_rom_group:
+        st.markdown(f"#### {rom_group}")
+        current_rom_group = rom_group
+    rom_display_name = format_rom_display_name(item, ref)
     is_median_item = (joint == "腰部" and item in ["屈曲", "伸展", "右側屈", "左側屈", "右回旋", "左回旋"]) or joint == "頸部"
     
     if is_median_item:
         if needs_ef:
             c_val, c_pain, c_ef, _ = st.columns([1.5, 0.8, 2.5, 3])
-            with c_val: rom_results["正中"][item] = st.number_input(f"【正中】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"c_{item}")
+            with c_val: rom_results["正中"][item] = st.number_input(f"【正中】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"c_{item}")
             with c_pain:
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 rom_pain_results["正中"][item] = st.checkbox("疼痛あり", key=f"cpain_{item}")
@@ -340,7 +376,7 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
                 endfeel_results["正中"][item] = st.multiselect("End-Feel", EF_OPTIONS, key=f"ef_c_{item}", label_visibility="collapsed", placeholder="EFを選択")
         else:
             c_val, c_pain, _ = st.columns([1.5, 0.8, 5.7])
-            with c_val: rom_results["正中"][item] = st.number_input(f"【正中】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"c_{item}")
+            with c_val: rom_results["正中"][item] = st.number_input(f"【正中】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"c_{item}")
             with c_pain:
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 rom_pain_results["正中"][item] = st.checkbox("疼痛あり", key=f"cpain_{item}")
@@ -349,11 +385,11 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
             cr_val, cr_pain, cr_ef, cl_val, cl_pain, cl_ef, _ = st.columns([1.5, 0.8, 2.5, 1.5, 0.8, 2.5, 1])
             if item == "内旋(結帯)":
                 opts = ["Th4-8", "Th9-12", "L1-5", "仙骨", "腸骨"]
-                with cr_val: rom_results["右"][item] = st.selectbox(f"【右】{item}", opts, index=None, key=f"r_{item}")
-                with cl_val: rom_results["左"][item] = st.selectbox(f"【左】{item}", opts, index=None, key=f"l_{item}")
+                with cr_val: rom_results["右"][item] = st.selectbox(f"【右】{rom_display_name}", opts, index=None, key=f"r_{item}", placeholder="未測定")
+                with cl_val: rom_results["左"][item] = st.selectbox(f"【左】{rom_display_name}", opts, index=None, key=f"l_{item}", placeholder="未測定")
             else:
-                with cr_val: rom_results["右"][item] = st.number_input(f"【右】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"r_{item}")
-                with cl_val: rom_results["左"][item] = st.number_input(f"【左】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"l_{item}")
+                with cr_val: rom_results["右"][item] = st.number_input(f"【右】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"r_{item}")
+                with cl_val: rom_results["左"][item] = st.number_input(f"【左】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"l_{item}")
             with cr_pain:
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 rom_pain_results["右"][item] = st.checkbox("疼痛あり", key=f"rpain_{item}")
@@ -370,11 +406,11 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
             cr_val, cr_pain, cl_val, cl_pain, _ = st.columns([1.5, 0.8, 1.5, 0.8, 3.4])
             if item == "内旋(結帯)":
                 opts = ["Th4-8", "Th9-12", "L1-5", "仙骨", "腸骨"]
-                with cr_val: rom_results["右"][item] = st.selectbox(f"【右】{item}", opts, index=None, key=f"r_{item}")
-                with cl_val: rom_results["左"][item] = st.selectbox(f"【左】{item}", opts, index=None, key=f"l_{item}")
+                with cr_val: rom_results["右"][item] = st.selectbox(f"【右】{rom_display_name}", opts, index=None, key=f"r_{item}", placeholder="未測定")
+                with cl_val: rom_results["左"][item] = st.selectbox(f"【左】{rom_display_name}", opts, index=None, key=f"l_{item}", placeholder="未測定")
             else:
-                with cr_val: rom_results["右"][item] = st.number_input(f"【右】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"r_{item}")
-                with cl_val: rom_results["左"][item] = st.number_input(f"【左】{item}", value=None, step=1, format="%d", placeholder=str(ref), key=f"l_{item}")
+                with cr_val: rom_results["右"][item] = st.number_input(f"【右】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"r_{item}")
+                with cl_val: rom_results["左"][item] = st.number_input(f"【左】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"l_{item}")
             with cr_pain:
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 rom_pain_results["右"][item] = st.checkbox("疼痛あり", key=f"rpain_{item}")
@@ -476,18 +512,23 @@ if joint == "腰部":
 
 # MMT入力
 st.subheader("💪 徒手筋力テスト (MMT)")
+st.caption(
+    "括弧内の髄節は主な神経根レベルの目安です。各筋は複数の神経根から支配を受けるため、"
+    "感覚・反射・症状分布などを含めて総合的に判断してください。"
+)
 mmt_opts = ["0", "1", "2", "3-", "3", "3+", "4", "5"]
 for item in JOINT_CONFIG[joint]["mmt"]:
+    mmt_display_name = format_mmt_display_name(item)
     is_median_item = (joint == "腰部" and item in ["体幹屈筋群", "体幹伸筋群", "腹斜筋群"]) or (joint == "頸部" and item == "頚部伸筋群")
     
     if is_median_item:
         c1, _ = st.columns([1, 3])
         with c1:
-            mmt_results["正中"][item] = st.selectbox(f"【正中】{item}", mmt_opts, index=None, key=f"mc_{item}")
+            mmt_results["正中"][item] = st.selectbox(f"【正中】{mmt_display_name}", mmt_opts, index=None, key=f"mc_{item}")
     elif side == "両側":
         c1, c2, _ = st.columns([1, 1, 2])
-        with c1: mmt_results["右"][item] = st.selectbox(f"【右】{item}", mmt_opts, index=None, key=f"mr_{item}")
-        with c2: mmt_results["左"][item] = st.selectbox(f"【左】{item}", mmt_opts, index=None, key=f"ml_{item}")
+        with c1: mmt_results["右"][item] = st.selectbox(f"【右】{mmt_display_name}", mmt_opts, index=None, key=f"mr_{item}")
+        with c2: mmt_results["左"][item] = st.selectbox(f"【左】{mmt_display_name}", mmt_opts, index=None, key=f"ml_{item}")
 
 grip_strength_r = grip_strength_l = None
 if joint in GRIP_STRENGTH_JOINTS:
@@ -832,9 +873,9 @@ pt_observation = st.text_area(
     height=120,
     key="pt_observation",
     help=(
-        "既存の項目にない評価結果、姿勢・動作・歩行所見、触診所見、"
-        "臨床推論などを入力してください。AIが補足評価結果とPT推論に分け、"
-        "文章として整理します。"
+        "既存の項目にない評価結果、患者申告、姿勢・動作・歩行所見、臨床推論などを"
+        "入力してください。客観所見は該当する評価項目へ統合し、臨床推論は"
+        "理学療法評価へ反映します。"
     ),
 )
 normalized_pt_observation = normalize_pt_free_text(pt_observation)
@@ -854,7 +895,7 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
         preview_rom_items.append(f"{item}({s}{format_measurement_value(value)}{pain_label})")
 
 preview_mmt_items = [
-    f"{item}({s}{value})"
+    f"{format_mmt_display_name(item)}({s}{value})"
     for item in JOINT_CONFIG[joint]["mmt"]
     for s in sides_to_eval
     if (value := mmt_results[s].get(item)) is not None and value != "5"
@@ -974,7 +1015,7 @@ if st.button("🚀 生成開始", use_container_width=True):
             for s in sides_to_eval:
                 val = mmt_results[s].get(item)
                 if val is not None and val != "5":
-                    mmt_list.append(f"{item}({s}{val})")
+                    mmt_list.append(f"{format_mmt_display_name(item)}({s}{val})")
                     
         special_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in special_results[s].items() if v]
         check_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in check_results[s].items() if v]
@@ -1040,7 +1081,7 @@ if st.button("🚀 生成開始", use_container_width=True):
 """
         if normalized_pt_observation:
             common_data += (
-                "・PT自由記載（補足評価結果・臨床推論が混在する可能性あり）："
+                "・PT自由記載（客観所見・患者申告・臨床推論が混在する可能性あり）："
                 f"{normalized_pt_observation}\n"
             )
         else:
@@ -1078,9 +1119,9 @@ if st.button("🚀 生成開始", use_container_width=True):
 ・【可動域について】（20文字以内。変化の経過を踏まえ、疼痛を伴う制限がある場合はその旨を記載）
 ・【優先的問題点】
   現在の評価結果と計画書更新用カルテ内容を統合し、疼痛、機能障害、ADL・参加制限、治療上の課題を総合して、優先順位の高い順に必ず次の形式で3項目を記載してください。
-  1. 〇〇
-  2. 〇〇
-  3. 〇〇
+  ＃1 〇〇
+  ＃2 〇〇
+  ＃3 〇〇
   同じ問題の言い換えによる重複を避け、各項目は計画書へ転記しやすい簡潔な表現にしてください。入力情報から判断できない内容や新しい診断名を推測で追加しないでください。3項目を抽出できる情報がない場合も番号は省略せず、「情報不足：判断できる記載なし」など不足が分かる表現にしてください。
 ・【短期目標】（100文字以内。変化の経過を踏まえて記載）
 ・【長期目標】（50文字以内。変化の経過を踏まえて記載）
@@ -1109,6 +1150,7 @@ if st.button("🚀 生成開始", use_container_width=True):
 ・結果行の先頭には、半角スペースではなく全角スペース「　」を1つ入れてください。項目名と結果の間、および次の項目との間に空行を入れないでください。
 ・結果が複数行になる場合も、各結果行の先頭へ全角スペース「　」を1つ入れてください。箇条書きにする場合は「　・結果」の形式にしてください。
 ・疼痛、関節可動域、関節弛緩性テスト、筋力、握力、感覚、スペシャルテスト、理学療法評価、ADL、および出力するその他の評価項目を同じ形式に統一してください。測定対象外などで項目を出力しない場合を除き、項目名だけを出力して結果を空欄にしないでください。
+・筋力は、入力データに付記した髄節レベルを筋名とともに記載してください。ただし、髄節レベルだけで神経学的診断を確定してはいけません。
 ・次のレイアウト例に従ってください。例の内容を評価結果として流用せず、与えられたデータを変更・要約せずに記載してください。
   疼痛：
   　安静時0、夜間時0、動作時0
@@ -1116,9 +1158,9 @@ if st.button("🚀 生成開始", use_container_width=True):
   　肩関節屈曲：右120°、左180°
   　肩関節外転：右100°、左180°
   筋力：
-  　・棘上筋：右MMT4、左MMT5
-  　・三角筋：右MMT4、左MMT5
-・優先順位が高い問題点を「優先的問題点：」の単独行に続けて、各結果行を全角スペースで字下げし、3つの箇条書きで挙げてください（改善が見込める、かつ構造化評価とPT自由記載に明示された推論から導き出される視点から判断。1項目につき30文字程度で簡潔に）。
+  　棘上筋（C5-C6）は右MMT4、左MMT5であった。
+  　三角筋(前・中・後)（C5-C6）は右MMT4、左MMT5であった。
+・優先順位が高い問題点を「優先的問題点：」の単独行に続けて、各結果行を全角スペースで字下げし、必ず「　＃1 〇〇」「　＃2 〇〇」「　＃3 〇〇」の3行で記載してください（改善が見込める、かつ構造化評価とPT自由記載に明示された推論から導き出される視点から判断。1項目につき30文字程度で簡潔に）。
 ・最後に必ず以下の期限をそのまま記載してください：
   【標準算定期限】：{std_deadline_str}
   【リハビリ期限】：{rehab_deadline_str}
