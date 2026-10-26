@@ -100,6 +100,125 @@ ROM_REFERENCE_VALUES = {
     },
 }
 
+# 関節可動域表示ならびに測定法（2022年4月改訂）の基本軸・移動軸。
+# 参考可動域がない項目（CV角、外旋(3rd)、内旋(結帯)、外反、母指対立、SLR）は対象外。
+_CERVICAL_FLEXION_AXES = ("肩峰を通る床への垂直線", "外耳孔と頭頂を結ぶ線")
+_CERVICAL_LATERAL_FLEXION_AXES = (
+    "第7頸椎棘突起と第1仙椎の棘突起を結ぶ線",
+    "頭頂と第7頸椎棘突起を結ぶ線",
+)
+_CERVICAL_ROTATION_AXES = ("両側の肩峰を結ぶ線への垂直線", "鼻梁と後頭結節を結ぶ線")
+_THORACOLUMBAR_FLEXION_AXES = ("仙骨後面", "第1胸椎棘突起と第5腰椎棘突起を結ぶ線")
+_THORACOLUMBAR_LATERAL_FLEXION_AXES = (
+    "ヤコビー線の中点に立てた垂直線",
+    "第1胸椎棘突起と第5腰椎棘突起を結ぶ線",
+)
+_THORACOLUMBAR_ROTATION_AXES = ("両側の後上腸骨棘を結ぶ線", "両側の肩峰を結ぶ線")
+_SHOULDER_ELEVATION_AXES = ("肩峰を通る床への垂直線", "上腕骨")
+_SHOULDER_ROTATION_AXES = ("肘を通る前額面への垂直線", "尺骨")
+_ELBOW_AXES = ("上腕骨", "橈骨")
+_FOREARM_AXES = ("床への垂直線", "手指を伸展した手掌面")
+_WRIST_FLEXION_AXES = ("橈骨", "第2中手骨")
+_WRIST_DEVIATION_AXES = ("前腕の中央線", "第3中手骨")
+_THUMB_ABDUCTION_AXES = ("示指（橈骨の延長上）", "母指")
+_MP_AXES = ("第2-5中手骨", "第2-5基節骨")
+_PIP_AXES = ("第2-5基節骨", "第2-5中節骨")
+_DIP_AXES = ("第2-5中節骨", "第2-5末節骨")
+_HIP_FLEXION_AXES = ("体幹と平行な線", "大腿骨（大転子と大腿骨外顆の中心を結ぶ線）")
+_HIP_ABDUCTION_AXES = (
+    "両側の上前腸骨棘を結ぶ線への垂直線",
+    "大腿中央線（上前腸骨棘より膝蓋骨中心を結ぶ線）",
+)
+_HIP_ROTATION_AXES = (
+    "膝蓋骨より下ろした垂直線",
+    "下腿中央線（膝蓋骨中心より足関節内外果中央を結ぶ線）",
+)
+_KNEE_AXES = ("大腿骨", "腓骨（腓骨頭と外果を結ぶ線）")
+_ANKLE_AXES = ("矢状面における腓骨長軸への垂直線", "足底面")
+
+_HIP_AXES_BY_MOTION = {
+    "屈曲": _HIP_FLEXION_AXES,
+    "伸展": _HIP_FLEXION_AXES,
+    "外転": _HIP_ABDUCTION_AXES,
+    "内転": _HIP_ABDUCTION_AXES,
+    "外旋": _HIP_ROTATION_AXES,
+    "内旋": _HIP_ROTATION_AXES,
+}
+_LOWER_LIMB_ADDITIONAL_AXES = {
+    "膝関節屈曲": _KNEE_AXES,
+    "膝関節伸展": _KNEE_AXES,
+    "足関節背屈": _ANKLE_AXES,
+    "足関節底屈": _ANKLE_AXES,
+}
+_PREFIXED_HIP_AXES = {
+    f"股関節{motion}": axes for motion, axes in _HIP_AXES_BY_MOTION.items()
+}
+
+ROM_MEASUREMENT_AXES = {
+    "頸部": {
+        "屈曲": _CERVICAL_FLEXION_AXES,
+        "伸展": _CERVICAL_FLEXION_AXES,
+        "右側屈": _CERVICAL_LATERAL_FLEXION_AXES,
+        "左側屈": _CERVICAL_LATERAL_FLEXION_AXES,
+        "右回旋": _CERVICAL_ROTATION_AXES,
+        "左回旋": _CERVICAL_ROTATION_AXES,
+    },
+    "腰部": {
+        "屈曲": _THORACOLUMBAR_FLEXION_AXES,
+        "伸展": _THORACOLUMBAR_FLEXION_AXES,
+        "右側屈": _THORACOLUMBAR_LATERAL_FLEXION_AXES,
+        "左側屈": _THORACOLUMBAR_LATERAL_FLEXION_AXES,
+        "右回旋": _THORACOLUMBAR_ROTATION_AXES,
+        "左回旋": _THORACOLUMBAR_ROTATION_AXES,
+        **_PREFIXED_HIP_AXES,
+        **_LOWER_LIMB_ADDITIONAL_AXES,
+    },
+    "肩関節": {
+        "屈曲": _SHOULDER_ELEVATION_AXES,
+        "伸展": _SHOULDER_ELEVATION_AXES,
+        "外転": _SHOULDER_ELEVATION_AXES,
+        "内転": _SHOULDER_ELEVATION_AXES,
+        "外旋(1st)": _SHOULDER_ROTATION_AXES,
+        "外旋(2nd)": _SHOULDER_ROTATION_AXES,
+    },
+    "肘関節": {
+        "屈曲": _ELBOW_AXES,
+        "伸展": _ELBOW_AXES,
+        "回外": _FOREARM_AXES,
+        "回内": _FOREARM_AXES,
+    },
+    "手関節": {
+        "掌屈": _WRIST_FLEXION_AXES,
+        "背屈": _WRIST_FLEXION_AXES,
+        "橈屈": _WRIST_DEVIATION_AXES,
+        "尺屈": _WRIST_DEVIATION_AXES,
+        "母指橈側外転": _THUMB_ABDUCTION_AXES,
+        "母指掌側外転": _THUMB_ABDUCTION_AXES,
+    },
+    "手指": {
+        "MP屈曲": _MP_AXES,
+        "MP伸展": _MP_AXES,
+        "PIP屈曲": _PIP_AXES,
+        "PIP伸展": _PIP_AXES,
+        "DIP屈曲": _DIP_AXES,
+        "DIP伸展": _DIP_AXES,
+    },
+    "股関節": {**_HIP_AXES_BY_MOTION, **_LOWER_LIMB_ADDITIONAL_AXES},
+    "膝関節": {
+        **_PREFIXED_HIP_AXES,
+        "屈曲": _KNEE_AXES,
+        "伸展": _KNEE_AXES,
+        "足関節背屈": _ANKLE_AXES,
+        "足関節底屈": _ANKLE_AXES,
+    },
+    "足関節": {
+        "背屈": _ANKLE_AXES,
+        "底屈": _ANKLE_AXES,
+        "膝関節屈曲": _KNEE_AXES,
+        "膝関節伸展": _KNEE_AXES,
+    },
+}
+
 MMT_MYOTOME_MAP = {
     "頚部伸筋群": "C2-C4",
     "僧帽筋上部": "C3-C4・副神経",
@@ -147,9 +266,10 @@ NECK_MMT_ITEMS = (
     "前鋸筋",
     "上腕二頭筋",
     "上腕三頭筋",
-    "肩甲下筋",
     "上腕筋",
     "腕橈骨筋",
+    "手関節伸筋",
+    "手関節屈筋",
 )
 
 
@@ -329,6 +449,18 @@ def format_rom_display_name(item, reference_value):
     else:
         formatted_reference = str(reference_value)
     return f"{item}（{formatted_reference}°）"
+
+
+def format_rom_measurement_help(reference_value, axes):
+    """Return tooltip text with the reference ROM and measurement axes."""
+    lines = []
+    if reference_value is not None:
+        lines.append(f"参考可動域：{format_measurement_value(reference_value)}°")
+    if axes:
+        basic_axis, moving_axis = axes
+        lines.append(f"基本軸：{basic_axis}")
+        lines.append(f"移動軸：{moving_axis}")
+    return "\n\n".join(lines) or None
 
 
 def format_mmt_display_name(muscle_name, myotome_map=None):

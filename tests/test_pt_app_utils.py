@@ -4,6 +4,7 @@ from pt_app_utils import LAXITY_MAX_SCORE
 from pt_app_utils import MMT_MYOTOME_MAP
 from pt_app_utils import NECK_MMT_ITEMS
 from pt_app_utils import PLAN_TRANSLATION_LANGUAGES
+from pt_app_utils import ROM_MEASUREMENT_AXES
 from pt_app_utils import ROM_REFERENCE_VALUES
 from pt_app_utils import build_balance_assessment_lines
 from pt_app_utils import build_privacy_review_key
@@ -26,6 +27,7 @@ from pt_app_utils import extract_rehabilitation_plan_section
 from pt_app_utils import format_grip_strength_items
 from pt_app_utils import format_mmt_display_name
 from pt_app_utils import format_rom_display_name
+from pt_app_utils import format_rom_measurement_help
 from pt_app_utils import is_plan_translation_usable
 from pt_app_utils import normalize_pt_free_text
 from pt_app_utils import should_include_rom_value
@@ -107,6 +109,46 @@ class RomAndMmtDisplayTests(unittest.TestCase):
     def test_neck_mmt_contains_bilateral_triceps_item(self):
         self.assertIn("上腕三頭筋", NECK_MMT_ITEMS)
         self.assertNotEqual(NECK_MMT_ITEMS[0], "上腕三頭筋")
+
+    def test_neck_mmt_replaces_subscapularis_with_wrist_muscles(self):
+        self.assertNotIn("肩甲下筋", NECK_MMT_ITEMS)
+        self.assertIn("手関節伸筋", NECK_MMT_ITEMS)
+        self.assertIn("手関節屈筋", NECK_MMT_ITEMS)
+        self.assertEqual(len(NECK_MMT_ITEMS), len(set(NECK_MMT_ITEMS)))
+        for muscle in NECK_MMT_ITEMS:
+            self.assertIn(muscle, MMT_MYOTOME_MAP)
+
+    def test_subscapularis_myotome_is_kept_for_shoulder(self):
+        self.assertEqual(MMT_MYOTOME_MAP["肩甲下筋"], "C5-C6")
+
+
+class RomMeasurementAxesTests(unittest.TestCase):
+    def test_axes_exist_exactly_for_items_with_reference_values(self):
+        for joint, items in ROM_REFERENCE_VALUES.items():
+            for item, reference in items.items():
+                with self.subTest(joint=joint, item=item):
+                    has_axes = item in ROM_MEASUREMENT_AXES.get(joint, {})
+                    self.assertEqual(has_axes, reference is not None)
+
+    def test_axes_are_pairs_of_nonempty_text(self):
+        for joint, items in ROM_MEASUREMENT_AXES.items():
+            for item, axes in items.items():
+                with self.subTest(joint=joint, item=item):
+                    self.assertEqual(len(axes), 2)
+                    self.assertTrue(all(isinstance(axis, str) and axis for axis in axes))
+
+    def test_same_motion_uses_same_axes_across_joint_screens(self):
+        self.assertEqual(ROM_MEASUREMENT_AXES["股関節"]["屈曲"], ROM_MEASUREMENT_AXES["膝関節"]["股関節屈曲"])
+        self.assertEqual(ROM_MEASUREMENT_AXES["膝関節"]["屈曲"], ROM_MEASUREMENT_AXES["股関節"]["膝関節屈曲"])
+        self.assertEqual(ROM_MEASUREMENT_AXES["足関節"]["背屈"], ROM_MEASUREMENT_AXES["腰部"]["足関節背屈"])
+
+    def test_formats_help_with_reference_and_axes(self):
+        text = format_rom_measurement_help(145, ("上腕骨", "橈骨"))
+        self.assertEqual(text, "参考可動域：145°\n\n基本軸：上腕骨\n\n移動軸：橈骨")
+
+    def test_help_keeps_zero_reference_and_handles_missing_data(self):
+        self.assertIn("参考可動域：0°", format_rom_measurement_help(0, ("大腿骨", "腓骨")))
+        self.assertIsNone(format_rom_measurement_help(None, None))
 
 
 class PrivacyDetectionTests(unittest.TestCase):
