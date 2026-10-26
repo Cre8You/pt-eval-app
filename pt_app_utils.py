@@ -1,3 +1,4 @@
+import hashlib
 import math
 import re
 
@@ -260,6 +261,50 @@ TUG_REFERENCE_CUTOFF_SECONDS = 13.5
 SINGLE_LEG_STANCE_REFERENCE_SECONDS = 5.0
 SEBT_COMPOSITE_REFERENCE_PERCENT = 94.0
 SEBT_ANTERIOR_ASYMMETRY_REFERENCE_CM = 4.0
+ROM_REFERENCE_DIFFERENCE_THRESHOLD = 5
+ROM_SIDE_DIFFERENCE_THRESHOLD = 5
+
+
+def _is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def should_include_rom_value(
+    value,
+    reference,
+    *,
+    has_pain=False,
+    has_end_feel=False,
+    contralateral_value=None,
+):
+    """Decide whether a measured ROM value is sent to the AI prompt.
+
+    Values close to the reference are omitted only when there is no pain,
+    no End-Feel entry and no side-to-side difference, so that reference
+    values alone are not used to discard clinically relevant findings.
+    """
+    if value is None:
+        return False
+    if not _is_number(value) or not _is_number(reference):
+        return True
+    if abs(value - reference) >= ROM_REFERENCE_DIFFERENCE_THRESHOLD:
+        return True
+    if has_pain or has_end_feel:
+        return True
+    if (
+        _is_number(contralateral_value)
+        and abs(value - contralateral_value) >= ROM_SIDE_DIFFERENCE_THRESHOLD
+    ):
+        return True
+    return False
+
+
+def build_privacy_review_key(text_fields):
+    """Return a widget-key suffix that changes whenever any scanned text changes."""
+    joined = "\u0000".join(
+        f"{field_name}\u0001{value or ''}" for field_name, value in text_fields.items()
+    )
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:16]
 
 
 def detect_potential_personal_information(text_fields):

@@ -9,6 +9,7 @@ from pt_app_utils import build_pt_free_text_instruction
 from pt_app_utils import calculate_laxity_score
 from pt_app_utils import calculate_sebt_anterior_asymmetry
 from pt_app_utils import calculate_sebt_composite_score
+from pt_app_utils import build_privacy_review_key
 from pt_app_utils import detect_potential_personal_information
 from pt_app_utils import extract_rehabilitation_plan_section
 from pt_app_utils import format_grip_strength_items
@@ -25,6 +26,7 @@ from pt_app_utils import response_may_be_blocked_by_safety
 from pt_app_utils import ROM_REFERENCE_VALUES
 from pt_app_utils import SEBT_ANTERIOR_ASYMMETRY_REFERENCE_CM
 from pt_app_utils import SEBT_COMPOSITE_REFERENCE_PERCENT
+from pt_app_utils import should_include_rom_value
 from pt_app_utils import SINGLE_LEG_STANCE_REFERENCE_SECONDS
 from pt_app_utils import summarize_free_text
 from pt_app_utils import summarize_items
@@ -45,7 +47,7 @@ JOINT_CONFIG = {
         "rom": ROM_REFERENCE_VALUES["頸部"],
         "mmt": list(NECK_MMT_ITEMS),
         "sensory": ["C5", "C6", "C7", "C8", "Th1"],
-        "special": ["Cervical Flexion-Rotation Test", "Spurlingテスト(右)", "Spurlingテスト(左)", "Jacksonテスト(右)", "Jacksonテスト(左)", "頸椎牽引テスト", "Hoffmann反射", "Trener反射", "足クローヌス", "Babisnki反射", "Adsonテスト", "Wrightテスト", "Edenテスト"],
+        "special": ["Cervical Flexion-Rotation Test", "Spurlingテスト(右)", "Spurlingテスト(左)", "Jacksonテスト(右)", "Jacksonテスト(左)", "頸椎牽引テスト", "Hoffmann反射", "Trömner反射", "足クローヌス", "Babinski反射", "Adsonテスト", "Wrightテスト", "Edenテスト"],
         "check": ["前方頭位(FHP)", "胸椎後弯・肩甲骨外転位"]
     },
     "腰部": {
@@ -66,28 +68,28 @@ JOINT_CONFIG = {
         "rom": ROM_REFERENCE_VALUES["肘関節"],
         "mmt": ["上腕二頭筋", "上腕三頭筋", "上腕筋", "腕橈骨筋", "円回内筋", "方形回内筋", "回外筋", "手関節伸筋", "手関節屈筋"],
         "sensory": [],
-        "special": ["Thomsenテスト", "内側上顆炎テスト", "MCLストレス", "LCLストレス", "ピアノキーサイン", "Tinelサイン(肘部管)"],
+        "special": ["Thomsenテスト", "内側上顆炎テスト", "MCLストレス", "LCLストレス", "Tinelサイン(肘部管)"],
         "check": ["食事困難", "洗顔困難", "洗髪困難", "生理的外反の左右差"]
     },
     "手関節": {
         "rom": ROM_REFERENCE_VALUES["手関節"],
         "mmt": ["手関節屈筋", "手関節伸筋"],
         "sensory": [],
-        "special": ["Phalenテスト", "逆Phalenテスト", "Tinelサイン(手根管)", "Tinelサイン(ギヨン管)", "Finkelsteinテスト", "Watsonテスト", "TFCC負荷テスト", "Allenテスト", "Fromentサイン"],
+        "special": ["Phalenテスト", "逆Phalenテスト", "Tinelサイン(手根管)", "Tinelサイン(ギヨン管)", "Finkelsteinテスト", "Watsonテスト", "TFCC負荷テスト", "ピアノキーサイン", "Allenテスト", "Fromentサイン"],
         "check": ["食事困難", "洗顔困難", "洗髪困難", "創部の癒着"]
     },
     "手指": {
         "rom": ROM_REFERENCE_VALUES["手指"],
         "mmt": ["骨間筋", "虫様筋"],
         "sensory": [],
-        "special": ["Elsonテスト", "Bunnel-Littlerテスト", "Tinelサイン(指神経)", "Fromentサイン", "側方動揺性(MP/PIP/DIP)"],
+        "special": ["Elsonテスト", "Bunnell-Littlerテスト", "Tinelサイン(指神経)", "Fromentサイン", "側方動揺性(MP/PIP/DIP)"],
         "check": ["ばね指(A1圧痛・弾発)", "マレット変形", "スワンネック変形", "ボタン穴変形", "ヘバーデン結節", "ブシャール結節", "浮腫・熱感", "食事困難", "書字困難"]
     },
     "股関節": {
         "rom": ROM_REFERENCE_VALUES["股関節"],
         "mmt": ["腸腰筋", "大殿筋", "中殿筋", "大腿筋膜張筋", "ハムストリングス"],
         "sensory": [],
-        "special": ["FADIR", "後方インピンジメント", "FABER(Patrick)", "トレンドレンブルグ徴候", "デュシェンヌ徴候", "スクイーズテスト", "シットアップテスト", "アリスサイン", "テレスコーピング", "クレイグテスト"],
+        "special": ["FADIR", "後方インピンジメント", "FABER(Patrick)", "トレンデレンブルグ徴候", "デュシェンヌ徴候", "スクイーズテスト", "シットアップテスト", "アリスサイン", "テレスコーピング", "クレイグテスト"],
         "check": ["逃避性歩行", "跛行", "分回し歩行", "靴下の着脱困難", "爪切り困難", "脚長差", "骨盤代償"]
     },
     "膝関節": {
@@ -141,9 +143,9 @@ SPECIAL_TEST_HELP = {
     "Jacksonテスト(左)": "【方法】頭部を伸展位で下方に圧迫。【陽性】上肢への放散痛（神経根症状）。",
     "頸椎牽引テスト": "【方法】頭部を上方に牽引する。【陽性】上肢の痛みやしびれが軽減。",
     "Hoffmann反射": "【方法】中指のDIP関節を掌屈させて弾く。【陽性】母指や示指が屈曲（病的反射）。",
-    "Trener反射": "【方法】中指の掌側からタッピングする。【陽性】母指などの屈曲（病的反射）。",
+    "Trömner反射": "【方法】中指の掌側からタッピングする。【陽性】母指などの屈曲（病的反射）。",
     "足クローヌス": "【方法】足関節を急に背屈させる。【陽性】律動的な底屈運動が続く（病的反射）。",
-    "Babisnki反射": "【方法】足底の外側から母指球に向けて擦過する。【陽性】母指の背屈と他趾の扇状開脚（病的反射）。",
+    "Babinski反射": "【方法】足底の外側から母趾球に向けて擦過する。【陽性】母趾の背屈と他趾の扇状開脚（病的反射）。",
     "Adsonテスト": "【方法】患側へ回旋・伸展し深吸気で息止め。【陽性】橈骨動脈の拍動減弱（斜角筋症候群）。",
     "Wrightテスト": "【方法】両上肢を挙上・外旋位にする。【陽性】橈骨動脈の拍動減弱（小胸筋症候群）。",
     "Edenテスト": "【方法】両肩を下方に引き下げる（胸を張る）。【陽性】橈骨動脈の拍動減弱（肋鎖症候群）。",
@@ -170,7 +172,6 @@ SPECIAL_TEST_HELP = {
     "内側上顆炎テスト": "【方法】肘伸展・前腕回外位で手関節掌屈に抵抗。【陽性】内側上顆部の疼痛（ゴルフ肘）。",
     "MCLストレス": "【方法】肘軽度屈曲位で外反ストレスを加える。【陽性】内側靭帯部の疼痛や動揺性。",
     "LCLストレス": "【方法】肘軽度屈曲位で内反ストレスを加える。【陽性】外側靭帯部の疼痛や動揺性。",
-    "ピアノキーサイン": "【方法】尺骨頭を掌側へ押圧する。【陽性】浮き上がるような動揺性（遠位橈尺関節不安定性）。",
     "Tinelサイン(肘部管)": "【方法】肘部管（内側上顆の後方）を叩打。【陽性】尺骨神経領域への放散痛やしびれ。",
     # 手関節
     "Phalenテスト": "【方法】両手関節を最大掌屈位で約1分間保持。【陽性】正中神経領域のしびれ増悪（手根管症候群）。",
@@ -180,18 +181,19 @@ SPECIAL_TEST_HELP = {
     "Finkelsteinテスト": "【方法】母指を握り込み、手関節を尺屈させる。【陽性】橈骨茎状突起部の疼痛（ドケルバン病）。",
     "Watsonテスト": "【方法】舟状骨を圧迫しながら手関節を尺屈から橈屈。【陽性】クリック音や疼痛（舟状月状骨間の不安定性）。",
     "TFCC負荷テスト": "【方法】手関節を尺屈させ圧迫しながら回旋ストレス。【陽性】尺側部の疼痛やクリック（TFCC損傷）。",
+    "ピアノキーサイン": "【方法】尺骨頭を掌側へ押圧する。【陽性】浮き上がるような動揺性（遠位橈尺関節不安定性）。",
     "Allenテスト": "【方法】橈尺両動脈を圧迫後、片方ずつ解除する。【陽性】血流の回復が遅延（動脈閉塞）。",
     "Fromentサイン": "【方法】紙を母指と示指で強くつまませる。【陽性】母指IP関節が屈曲する（尺骨神経麻痺）。",
     # 手指
     "Elsonテスト": "【方法】PIPを90度屈曲させPIP伸展に抵抗。【陽性】DIP関節が剛直になる（中央索断裂）。",
-    "Bunnel-Littlerテスト": "【方法】MP伸展位と屈曲位でPIPを他動屈曲。【陽性】MP伸展位でPIP屈曲制限が強まる（内在筋拘縮）。",
+    "Bunnell-Littlerテスト": "【方法】MP伸展位と屈曲位でPIPを他動屈曲。【陽性】MP伸展位でPIP屈曲制限が強まる（内在筋拘縮）。",
     "Tinelサイン(指神経)": "【方法】指神経に沿って叩打する。【陽性】指先への放散痛やしびれ。",
     "側方動揺性(MP/PIP/DIP)": "【方法】各関節を伸展・屈曲位で側方へストレス。【陽性】動揺性がある（側副靭帯損傷）。",
     # 股関節
     "FADIR": "【方法】股関節屈曲・内転・内旋を強制。【陽性】鼠径部痛やクリック（前方インピンジメント）。",
     "後方インピンジメント": "【方法】股関節伸展・外旋を強制。【陽性】臀部痛やクリック（後方インピンジメント）。",
     "FABER(Patrick)": "【方法】屈曲・外転・外旋（あぐら）で膝を下方に押す。【陽性】股関節痛や仙腸関節痛。",
-    "トレンドレンブルグ徴候": "【方法】片脚立位をとらせる。【陽性】遊脚側の骨盤が下がる（中殿筋の機能不全）。",
+    "トレンデレンブルグ徴候": "【方法】片脚立位をとらせる。【陽性】遊脚側の骨盤が下がる（中殿筋の機能不全）。",
     "デュシェンヌ徴候": "【方法】歩行時または片脚立位を観察。【陽性】立脚側に体幹を傾斜させる（中殿筋機能低下）。",
     "スクイーズテスト": "【方法】両下肢の間に拳を挟み内転させる。【陽性】鼠径部や恥骨部の疼痛（グロインペインなど）。",
     "シットアップテスト": "【方法】背臥位から上体を起こす。【陽性】脚の長さの左右差が変化する（骨盤の傾斜・ねじれ）。",
@@ -255,6 +257,7 @@ LAXITY_SINGLE_KEYS = {
 }
 
 GRIP_STRENGTH_JOINTS = {"頸部", "手関節", "手指"}
+GENERATION_RESULT_STATE_KEY = "generation_result"
 
 st.title("🦴 Yudai式：AI理学療法アシスタント")
 st.warning(
@@ -288,11 +291,22 @@ with st.sidebar:
     st.header("📋 基本設定")
     patient_id = st.text_input("患者ID", "000000")
     joint = st.selectbox("評価する部位を選択", list(JOINT_CONFIG.keys()))
-    diagnosis = st.text_input("病名を入力", "腰椎椎間板ヘルニア")
-    
+    diagnosis = st.text_input(
+        "病名を入力（必須）",
+        "",
+        placeholder="例：腰椎椎間板ヘルニア",
+    )
+
     onset_date = st.date_input("発症日", datetime.date.today())
     rehab_start_date = st.date_input("リハ開始日", datetime.date.today())
-    
+    st.caption(
+        "発症日・リハ開始日の初期値は今日です。期限計算に使うため、必ず確認してください。\n\n"
+        f"標準算定期限：{(onset_date + datetime.timedelta(days=149)).strftime('%Y/%m/%d')}"
+        "（発症日＋149日）\n\n"
+        f"リハビリ期限：{(rehab_start_date + datetime.timedelta(days=149)).strftime('%Y/%m/%d')}"
+        "（リハ開始日＋149日）"
+    )
+
     if joint in ["頸部"]:
         side = "両側"
         sides_to_eval = ["右", "左", "正中"]
@@ -882,24 +896,42 @@ normalized_pt_observation = normalize_pt_free_text(pt_observation)
 
 st.divider()
 
-# Gemini送信内容の要約プレビュー
-preview_rom_items = []
+# Geminiへ送るROM・MMT（プレビューと送信内容で同じリストを使う）
+CONTRALATERAL_SIDE = {"右": "左", "左": "右"}
+rom_prompt_items = []
 for item, ref in JOINT_CONFIG[joint]["rom"].items():
     for s in sides_to_eval:
         value = rom_results[s].get(item)
-        if value is None:
+        has_pain = bool(rom_pain_results[s].get(item))
+        end_feel = endfeel_results[s].get(item) if needs_ef else None
+        contralateral_side = CONTRALATERAL_SIDE.get(s)
+        contralateral_value = (
+            rom_results[contralateral_side].get(item) if contralateral_side else None
+        )
+        if not should_include_rom_value(
+            value,
+            ref,
+            has_pain=has_pain,
+            has_end_feel=bool(end_feel),
+            contralateral_value=contralateral_value,
+        ):
             continue
-        if isinstance(value, (int, float)) and isinstance(ref, (int, float)) and abs(value - ref) < 5:
-            continue
-        pain_label = "（疼痛あり）" if rom_pain_results[s].get(item) else ""
-        preview_rom_items.append(f"{item}({s}{format_measurement_value(value)}{pain_label})")
+        pain_label = "（疼痛あり）" if has_pain else ""
+        end_feel_label = f"[{'・'.join(end_feel)}]" if end_feel else ""
+        rom_prompt_items.append(
+            f"{item}({s}{format_measurement_value(value)}{pain_label}{end_feel_label})"
+        )
 
-preview_mmt_items = [
+mmt_prompt_items = [
     f"{format_mmt_display_name(item)}({s}{value})"
     for item in JOINT_CONFIG[joint]["mmt"]
     for s in sides_to_eval
-    if (value := mmt_results[s].get(item)) is not None and value != "5"
+    if (value := mmt_results[s].get(item)) is not None
 ]
+
+# Gemini送信内容の要約プレビュー
+preview_rom_items = rom_prompt_items
+preview_mmt_items = mmt_prompt_items
 preview_special_items = [
     f"{test}" if s == "正中" else f"{test}({s})"
     for s in sides_to_eval
@@ -933,8 +965,8 @@ with st.expander("📋 Geminiへ送信する内容の要約を確認", expanded=
         f"""
 - **病名 / 評価部位**: {diagnosis} / {joint}
 - **疼痛**: 安静時{nrs_rest}、夜間時{nrs_night}、動作時{nrs_move}、特記：{summarize_free_text(pain_notes)}
-- **ROM異常**: {summarize_items(preview_rom_items)}
-- **MMT低下**: {summarize_items(preview_mmt_items)}
+- **ROM（参考値から5°以上の差、または疼痛・End-Feel・左右差あり）**: {summarize_items(preview_rom_items)}
+- **MMT（測定値）**: {summarize_items(preview_mmt_items)}
 - **握力**: {grip_strength_preview}
 - **関節弛緩性**: {laxity_preview} / 合計{laxity_score:.1f}点
 {balance_preview_block}- **陽性テスト**: {summarize_items(preview_special_items)}
@@ -949,16 +981,25 @@ privacy_scan_fields = {
     "病名": diagnosis,
     "疼痛の特記事項": pain_notes,
     "歩行の特記事項": motion_walking,
+    "TUGの歩行補助具・介助条件": tug_condition,
     "ADLの特記事項": adl_notes,
     "他部門からの情報": other_dept_info,
     "PT自由記載": pt_observation,
     "計画書更新用カルテ内容": patient_change,
 }
 privacy_findings = detect_potential_personal_information(privacy_scan_fields)
+privacy_findings_reviewed = False
 if privacy_findings:
     st.warning(
         "個人情報の可能性がある文字列を検知しました。内容を確認してください。\n\n"
-        f"検知箇所: {', '.join(privacy_findings)}"
+        f"検知箇所: {', '.join(privacy_findings)}\n\n"
+        "個人情報であれば削除してください。ROM表記（例：0-90-120）などの誤検知の場合は、"
+        "下の確認にチェックを入れると送信できます。"
+    )
+    # 対象欄の文章が変わるたびにキーが変わり、確認チェックが外れる
+    privacy_findings_reviewed = st.checkbox(
+        "検知箇所を確認し、個人情報ではない（誤検知である）ことを確認しました",
+        key=f"privacy_findings_reviewed_{build_privacy_review_key(privacy_scan_fields)}",
     )
 
 # Gemini送信前の個人情報確認
@@ -977,8 +1018,15 @@ target_translation_language = PLAN_TRANSLATION_LANGUAGES[translation_language_la
 
 # 実行ボタン
 if st.button("🚀 生成開始", use_container_width=True):
-    if privacy_findings:
-        st.warning("個人情報の可能性がある文字列を検知しました。内容を確認してください。")
+    # 新しい生成を始めたら、前回の結果を残さない
+    st.session_state.pop(GENERATION_RESULT_STATE_KEY, None)
+    if not diagnosis.strip():
+        st.error("病名が未入力です。サイドバーの「病名を入力（必須）」に入力してください。")
+    elif privacy_findings and not privacy_findings_reviewed:
+        st.warning(
+            "個人情報の可能性がある文字列を検知しました。内容を確認し、"
+            "個人情報であれば削除してください。誤検知の場合は確認のチェックを入れてください。"
+        )
     elif not privacy_confirmed:
         st.warning(
             "Geminiへ送信する前に、入力内容に個人情報が含まれていないことを"
@@ -995,28 +1043,9 @@ if st.button("🚀 生成開始", use_container_width=True):
         pain_str = f"安静時{nrs_rest}, 夜間時{nrs_night}, 動作時{nrs_move}"
         if pain_notes: pain_str += f"（特記：{pain_notes}）"
 
-        rom_list = []
-        for item in JOINT_CONFIG[joint]["rom"]:
-            ref = JOINT_CONFIG[joint]["rom"][item]
-            for s in sides_to_eval:
-                val = rom_results[s].get(item)
-                if val is not None:
-                    if isinstance(val, (int, float)) and isinstance(ref, (int, float)):
-                        if abs(val - ref) < 5:
-                            continue
-                    p = "（疼痛あり）" if rom_pain_results[s].get(item) else ""
-                    ef_str = ""
-                    if needs_ef and endfeel_results[s].get(item):
-                        ef_str = f"[{'・'.join(endfeel_results[s][item])}]"
-                    rom_list.append(f"{item}({s}{format_measurement_value(val)}{p}{ef_str})")
-        
-        mmt_list = []
-        for item in JOINT_CONFIG[joint]["mmt"]:
-            for s in sides_to_eval:
-                val = mmt_results[s].get(item)
-                if val is not None and val != "5":
-                    mmt_list.append(f"{format_mmt_display_name(item)}({s}{val})")
-                    
+        rom_list = rom_prompt_items
+        mmt_list = mmt_prompt_items
+
         special_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in special_results[s].items() if v]
         check_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in check_results[s].items() if v]
         sensory_pos = [f"{k}" if s == "正中" else f"{k}({s})" for s in sides_to_eval for k, v in sensory_results[s].items() if v]
@@ -1053,7 +1082,7 @@ if st.button("🚀 生成開始", use_container_width=True):
 ・病名：{diagnosis} / 部位：{joint}
 ・他部門からの情報：{other_dept_info if other_dept_info else "特記なし"}
 ・疼痛：{pain_str}
-・ROM（制限あり）：{"、".join(rom_list) if rom_list else "特記なし"}{motion_prompt_line}
+・ROM（参考値から5°以上の差、疼痛、End-Feel、左右差のいずれかがある測定値）：{"、".join(rom_list) if rom_list else "特記なし"}{motion_prompt_line}
 """
         if joint == "腰部":
             common_data += f"・筋柔軟性テスト：{flexibility_str}\n"
@@ -1074,7 +1103,7 @@ if st.button("🚀 生成開始", use_container_width=True):
             else:
                 common_data += "　未測定\n"
 
-        common_data += f"""・MMT（4以下）：{"、".join(mmt_list) if mmt_list else "特記なし"}
+        common_data += f"""・MMT（測定値）：{"、".join(mmt_list) if mmt_list else "特記なし"}
 ・感覚異常：{"、".join(sensory_pos) if sensory_pos else "特記なし"}
 ・陽性テスト：{"、".join(special_pos) if special_pos else "特記なし"}
 ・動作/制限(ADL)：{adl_str}
@@ -1143,7 +1172,7 @@ if st.button("🚀 生成開始", use_container_width=True):
 【条件】
 {balance_interpretation_instruction}
 {build_pt_free_text_instruction(is_reevaluation=False)}
-以下の構成と文字数制限を必ず遵守して出力してください。挨拶や前置きは不要です。いきなり【電子カルテ用】から出力してください。文章中での強調記号（カッコやアスタリスク等）は一切使用しないでください（指定した項目名のみ【】を使用可）。
+以下の構成と文字数制限を必ず遵守して出力してください。挨拶や前置きは不要です。いきなり【電子カルテ用】から出力してください。文章中での強調記号（カッコやアスタリスク等）は一切使用しないでください（指定した項目名のみ【】を使用可）。ただし、電子カルテ用の筋力項目では、筋名に付記した髄節レベルの括弧表記（例：棘上筋（C5-C6））をそのまま使用してください。
 【電子カルテ用】
 {balance_initial_output_instruction}
 ・実施した評価結果は、各評価項目の「項目名：」だけを1行で表示し、結果は必ず次の行へ表示してください。「項目名：結果」の1行形式にはしないでください。
@@ -1151,7 +1180,7 @@ if st.button("🚀 生成開始", use_container_width=True):
 ・結果が複数行になる場合も、各結果行の先頭へ全角スペース「　」を1つ入れてください。箇条書きにする場合は「　・結果」の形式にしてください。
 ・疼痛、関節可動域、関節弛緩性テスト、筋力、握力、感覚、スペシャルテスト、理学療法評価、ADL、および出力するその他の評価項目を同じ形式に統一してください。測定対象外などで項目を出力しない場合を除き、項目名だけを出力して結果を空欄にしないでください。
 ・筋力は、入力データに付記した髄節レベルを筋名とともに記載してください。ただし、髄節レベルだけで神経学的診断を確定してはいけません。
-・次のレイアウト例に従ってください。例の内容を評価結果として流用せず、与えられたデータを変更・要約せずに記載してください。
+・次のレイアウト例に従ってください。例の筋名・数値・左右はすべて架空であり、評価結果として流用してはいけません。与えられたデータを変更・要約せずに記載し、入力データに片側の値しかない項目は、その側だけを記載してください。入力されていない反対側の値や項目を推測で補ってはいけません。
   疼痛：
   　安静時0、夜間時0、動作時0
   関節可動域：
@@ -1267,21 +1296,37 @@ if st.button("🚀 生成開始", use_container_width=True):
                             "※AIによる参考翻訳です。使用前に医療スタッフが日本語原文と照合してください。"
                         )
 
-        st.subheader("✨ 出力結果")
+        # 画面操作による再実行で結果が消えないよう、session_stateへ保持する
+        st.session_state[GENERATION_RESULT_STATE_KEY] = {
+            "display_text": display_text,
+            "missing_items": list(missing_items),
+            "output_too_short": output_too_short,
+            "output_too_long": output_too_long,
+            "output_length": len(response_text.strip()),
+            "translation_warning": translation_warning,
+        }
+
+generation_result = st.session_state.get(GENERATION_RESULT_STATE_KEY)
+if generation_result:
+    st.subheader("✨ 出力結果")
+    st.warning(
+        "AI生成文は下書きです。必ず医療者が内容を確認・修正してから使用してください。\n\n"
+        "診断や治療方針の最終判断は、医師・担当医療者が行ってください。"
+    )
+    st.caption(
+        "直前に生成した結果を表示しています。入力内容を変更した場合は、"
+        "もう一度「生成開始」を押してください。"
+    )
+    if generation_result["missing_items"]:
         st.warning(
-            "AI生成文は下書きです。必ず医療者が内容を確認・修正してから使用してください。\n\n"
-            "診断や治療方針の最終判断は、医師・担当医療者が行ってください。"
+            "AI出力に不足または形式上の確認が必要な項目があります。"
+            "医療者が内容を確認してください。\n\n"
+            f"確認候補: {', '.join(generation_result['missing_items'])}"
         )
-        if missing_items:
-            st.warning(
-                "AI出力に不足または形式上の確認が必要な項目があります。"
-                "医療者が内容を確認してください。\n\n"
-                f"確認候補: {', '.join(missing_items)}"
-            )
-        if output_too_short:
-            st.warning(f"出力が短すぎる可能性があります。（{len(response_text.strip())}文字）")
-        if output_too_long:
-            st.warning(f"出力が長すぎる可能性があります。（{len(response_text.strip())}文字）")
-        st.text_area("Copy & Paste", display_text, height=600)
-        if translation_warning:
-            st.warning(translation_warning)
+    if generation_result["output_too_short"]:
+        st.warning(f"出力が短すぎる可能性があります。（{generation_result['output_length']}文字）")
+    if generation_result["output_too_long"]:
+        st.warning(f"出力が長すぎる可能性があります。（{generation_result['output_length']}文字）")
+    st.text_area("Copy & Paste", generation_result["display_text"], height=600)
+    if generation_result["translation_warning"]:
+        st.warning(generation_result["translation_warning"])
