@@ -16,6 +16,7 @@ from pt_app_utils import format_grip_strength_items
 from pt_app_utils import format_mmt_display_name
 from pt_app_utils import format_measurement_value
 from pt_app_utils import format_rom_display_name
+from pt_app_utils import format_rom_measurement_help
 from pt_app_utils import is_plan_translation_usable
 from pt_app_utils import LAXITY_MAX_SCORE
 from pt_app_utils import LOWER_LIMB_BALANCE_JOINTS
@@ -23,6 +24,7 @@ from pt_app_utils import normalize_pt_free_text
 from pt_app_utils import NECK_MMT_ITEMS
 from pt_app_utils import PLAN_TRANSLATION_LANGUAGES
 from pt_app_utils import response_may_be_blocked_by_safety
+from pt_app_utils import ROM_MEASUREMENT_AXES
 from pt_app_utils import ROM_REFERENCE_VALUES
 from pt_app_utils import SEBT_ANTERIOR_ASYMMETRY_REFERENCE_CM
 from pt_app_utils import SEBT_COMPOSITE_REFERENCE_PERCENT
@@ -48,7 +50,7 @@ JOINT_CONFIG = {
         "mmt": list(NECK_MMT_ITEMS),
         "sensory": ["C5", "C6", "C7", "C8", "Th1"],
         "special": ["Cervical Flexion-Rotation Test", "Spurlingテスト(右)", "Spurlingテスト(左)", "Jacksonテスト(右)", "Jacksonテスト(左)", "頸椎牽引テスト", "Hoffmann反射", "Trömner反射", "足クローヌス", "Babinski反射", "Adsonテスト", "Wrightテスト", "Edenテスト"],
-        "check": ["前方頭位(FHP)", "胸椎後弯・肩甲骨外転位"]
+        "check": ["前方頭位(FHP)", "胸椎後弯・肩甲骨外転位", "結髪動作困難"]
     },
     "腰部": {
         "rom": ROM_REFERENCE_VALUES["腰部"],
@@ -368,7 +370,19 @@ st.caption(
     "括弧内は、日本リハビリテーション医学会ほか"
     "『関節可動域表示ならびに測定法（2022年4月改訂）』による参考可動域です。"
     "正常・異常を断定する値ではなく、年齢、性別、測定肢位、左右差などを含めて判断してください。"
+    "各入力欄の（?）に基本軸・移動軸を表示しています。"
 )
+rom_axes_rows = [
+    f"| {item} | {format_measurement_value(ref)}° | {axes[0]} | {axes[1]} |"
+    for item, ref in JOINT_CONFIG[joint]["rom"].items()
+    if ref is not None and (axes := ROM_MEASUREMENT_AXES.get(joint, {}).get(item))
+]
+if rom_axes_rows:
+    with st.expander("📏 参考可動域・基本軸・移動軸の一覧"):
+        st.markdown(
+            "| 項目 | 参考可動域 | 基本軸 | 移動軸 |\n|---|---|---|---|\n"
+            + "\n".join(rom_axes_rows)
+        )
 current_rom_group = None
 for item, ref in JOINT_CONFIG[joint]["rom"].items():
     rom_group = ROM_GROUP_BY_ITEM.get(joint, {}).get(item)
@@ -376,12 +390,13 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
         st.markdown(f"#### {rom_group}")
         current_rom_group = rom_group
     rom_display_name = format_rom_display_name(item, ref)
+    rom_help = format_rom_measurement_help(ref, ROM_MEASUREMENT_AXES.get(joint, {}).get(item))
     is_median_item = (joint == "腰部" and item in ["屈曲", "伸展", "右側屈", "左側屈", "右回旋", "左回旋"]) or joint == "頸部"
     
     if is_median_item:
         if needs_ef:
             c_val, c_pain, c_ef, _ = st.columns([1.5, 0.8, 2.5, 3])
-            with c_val: rom_results["正中"][item] = st.number_input(f"【正中】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"c_{item}")
+            with c_val: rom_results["正中"][item] = st.number_input(rom_display_name, value=None, step=1, format="%d", placeholder="未測定", key=f"c_{item}", help=rom_help)
             with c_pain:
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 rom_pain_results["正中"][item] = st.checkbox("疼痛あり", key=f"cpain_{item}")
@@ -390,7 +405,7 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
                 endfeel_results["正中"][item] = st.multiselect("End-Feel", EF_OPTIONS, key=f"ef_c_{item}", label_visibility="collapsed", placeholder="EFを選択")
         else:
             c_val, c_pain, _ = st.columns([1.5, 0.8, 5.7])
-            with c_val: rom_results["正中"][item] = st.number_input(f"【正中】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"c_{item}")
+            with c_val: rom_results["正中"][item] = st.number_input(rom_display_name, value=None, step=1, format="%d", placeholder="未測定", key=f"c_{item}", help=rom_help)
             with c_pain:
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 rom_pain_results["正中"][item] = st.checkbox("疼痛あり", key=f"cpain_{item}")
@@ -402,8 +417,8 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
                 with cr_val: rom_results["右"][item] = st.selectbox(f"【右】{rom_display_name}", opts, index=None, key=f"r_{item}", placeholder="未測定")
                 with cl_val: rom_results["左"][item] = st.selectbox(f"【左】{rom_display_name}", opts, index=None, key=f"l_{item}", placeholder="未測定")
             else:
-                with cr_val: rom_results["右"][item] = st.number_input(f"【右】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"r_{item}")
-                with cl_val: rom_results["左"][item] = st.number_input(f"【左】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"l_{item}")
+                with cr_val: rom_results["右"][item] = st.number_input(f"【右】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"r_{item}", help=rom_help)
+                with cl_val: rom_results["左"][item] = st.number_input(f"【左】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"l_{item}", help=rom_help)
             with cr_pain:
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 rom_pain_results["右"][item] = st.checkbox("疼痛あり", key=f"rpain_{item}")
@@ -423,8 +438,8 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
                 with cr_val: rom_results["右"][item] = st.selectbox(f"【右】{rom_display_name}", opts, index=None, key=f"r_{item}", placeholder="未測定")
                 with cl_val: rom_results["左"][item] = st.selectbox(f"【左】{rom_display_name}", opts, index=None, key=f"l_{item}", placeholder="未測定")
             else:
-                with cr_val: rom_results["右"][item] = st.number_input(f"【右】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"r_{item}")
-                with cl_val: rom_results["左"][item] = st.number_input(f"【左】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"l_{item}")
+                with cr_val: rom_results["右"][item] = st.number_input(f"【右】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"r_{item}", help=rom_help)
+                with cl_val: rom_results["左"][item] = st.number_input(f"【左】{rom_display_name}", value=None, step=1, format="%d", placeholder="未測定", key=f"l_{item}", help=rom_help)
             with cr_pain:
                 st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                 rom_pain_results["右"][item] = st.checkbox("疼痛あり", key=f"rpain_{item}")
@@ -538,7 +553,7 @@ for item in JOINT_CONFIG[joint]["mmt"]:
     if is_median_item:
         c1, _ = st.columns([1, 3])
         with c1:
-            mmt_results["正中"][item] = st.selectbox(f"【正中】{mmt_display_name}", mmt_opts, index=None, key=f"mc_{item}")
+            mmt_results["正中"][item] = st.selectbox(mmt_display_name, mmt_opts, index=None, key=f"mc_{item}")
     elif side == "両側":
         c1, c2, _ = st.columns([1, 1, 2])
         with c1: mmt_results["右"][item] = st.selectbox(f"【右】{mmt_display_name}", mmt_opts, index=None, key=f"mr_{item}")
@@ -918,12 +933,13 @@ for item, ref in JOINT_CONFIG[joint]["rom"].items():
             continue
         pain_label = "（疼痛あり）" if has_pain else ""
         end_feel_label = f"[{'・'.join(end_feel)}]" if end_feel else ""
+        side_label = "" if s == "正中" else s
         rom_prompt_items.append(
-            f"{item}({s}{format_measurement_value(value)}{pain_label}{end_feel_label})"
+            f"{item}({side_label}{format_measurement_value(value)}{pain_label}{end_feel_label})"
         )
 
 mmt_prompt_items = [
-    f"{format_mmt_display_name(item)}({s}{value})"
+    f"{format_mmt_display_name(item)}({'' if s == '正中' else s}{value})"
     for item in JOINT_CONFIG[joint]["mmt"]
     for s in sides_to_eval
     if (value := mmt_results[s].get(item)) is not None
