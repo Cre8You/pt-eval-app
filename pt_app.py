@@ -268,6 +268,16 @@ GENERATION_RESULT_STATE_KEY = "generation_result"
 PENDING_AUTO_DOWNLOAD_STATE_KEY = "pending_auto_download"
 JAPAN_TIMEZONE = ZoneInfo("Asia/Tokyo")
 
+
+def render_auto_download(download_html):
+    """Run the download script in the main page so the browser does not treat it as an iframe download."""
+    try:
+        # iframe内のダウンロードはブラウザに止められやすいため、本体の画面で実行する
+        st.html(download_html, unsafe_allow_javascript=True)
+    except (TypeError, AttributeError):
+        # unsafe_allow_javascript に未対応の古いStreamlitでは従来の方法を使う
+        components.html(download_html, height=0)
+
 st.title("🦴 Yudai式：AI理学療法アシスタント")
 st.warning(
     "患者氏名、住所、電話番号、生年月日、保険証情報などの個人情報は入力しないでください。\n\n"
@@ -1390,12 +1400,11 @@ if generation_result:
         key=f"download_{generation_result['file_name']}",
     )
     if st.session_state.pop(PENDING_AUTO_DOWNLOAD_STATE_KEY, False) and auto_download_enabled:
-        components.html(
+        render_auto_download(
             build_auto_download_html(
                 generation_result["download_text"],
                 generation_result["file_name"],
-            ),
-            height=0,
+            )
         )
         st.caption(
             f"「{generation_result['file_name']}」の自動保存を実行しました。"
