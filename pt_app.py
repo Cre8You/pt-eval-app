@@ -1,7 +1,12 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import google.generativeai as genai
 import datetime
+from zoneinfo import ZoneInfo
 
+from pt_app_utils import build_auto_download_html
+from pt_app_utils import build_output_download_text
+from pt_app_utils import build_output_file_name
 from pt_app_utils import classify_gemini_error
 from pt_app_utils import build_balance_assessment_lines
 from pt_app_utils import build_plan_translation_prompt
@@ -260,6 +265,8 @@ LAXITY_SINGLE_KEYS = {
 
 GRIP_STRENGTH_JOINTS = {"頸部", "手関節", "手指"}
 GENERATION_RESULT_STATE_KEY = "generation_result"
+PENDING_AUTO_DOWNLOAD_STATE_KEY = "pending_auto_download"
+JAPAN_TIMEZONE = ZoneInfo("Asia/Tokyo")
 
 st.title("🦴 Yudai式：AI理学療法アシスタント")
 st.warning(
@@ -328,6 +335,18 @@ with st.sidebar:
             "入力がある場合は計画書更新モードになります。"
         ),
         height=120,
+    )
+
+    st.divider()
+    st.header("💾 出力の保存")
+    auto_download_enabled = st.checkbox(
+        "生成と同時にテキストファイルを自動保存する",
+        value=True,
+        key="auto_download_enabled",
+        help=(
+            "生成が終わると、出力内容をテキストファイルとしてPCへダウンロードします。"
+            "患者IDや氏名はファイルに含めません。保存したファイルは院内の規程に沿って管理してください。"
+        ),
     )
 
     st.divider()
@@ -1312,8 +1331,21 @@ if st.button("🚀 生成開始", use_container_width=True):
                             "※AIによる参考翻訳です。使用前に医療スタッフが日本語原文と照合してください。"
                         )
 
+        generated_at = datetime.datetime.now(JAPAN_TIMEZONE)
+        is_reevaluation_output = bool(patient_change)
         # 画面操作による再実行で結果が消えないよう、session_stateへ保持する
         st.session_state[GENERATION_RESULT_STATE_KEY] = {
+            "download_text": build_output_download_text(
+                display_text,
+                joint=joint,
+                is_reevaluation=is_reevaluation_output,
+                generated_at=generated_at,
+            ),
+            "file_name": build_output_file_name(
+                joint,
+                is_reevaluation_output,
+                generated_at,
+            ),
             "display_text": display_text,
             "missing_items": list(missing_items),
             "output_too_short": output_too_short,
@@ -1321,6 +1353,8 @@ if st.button("🚀 生成開始", use_container_width=True):
             "output_length": len(response_text.strip()),
             "translation_warning": translation_warning,
         }
+        # 自動保存は生成した直後の1回だけ行う
+        st.session_state[PENDING_AUTO_DOWNLOAD_STATE_KEY] = True
 
 generation_result = st.session_state.get(GENERATION_RESULT_STATE_KEY)
 if generation_result:
@@ -1346,3 +1380,24 @@ if generation_result:
     st.text_area("Copy & Paste", generation_result["display_text"], height=600)
     if generation_result["translation_warning"]:
         st.warning(generation_result["translation_warning"])
+
+    st.download_button(
+        "💾 テキストで保存",
+        data=generation_result["download_text"].encode("utf-8-sig"),
+        file_name=generation_result["file_name"],
+        mime="text/plain",
+        on_click="ignore",
+        key=f"download_{generation_result['file_name']}",
+    )
+    if st.session_state.pop(PENDING_AUTO_DOWNLOAD_STATE_KEY, False) and auto_download_enabled:
+        components.html(
+            build_auto_download_html(
+                generation_result["download_text"],
+                generation_result["file_name"],
+            ),
+            height=0,
+        )
+        st.caption(
+            f"「{generation_result['file_name']}」の自動保存を実行しました。"
+            "ダウンロードされていない場合は「テキストで保存」を押してください。"
+        )

@@ -1,4 +1,6 @@
+import base64
 import hashlib
+import json
 import math
 import re
 
@@ -998,3 +1000,48 @@ def response_may_be_blocked_by_safety(response):
         return False
     safety_summary = " ".join(str(value).upper() for value in safety_values)
     return any(marker in safety_summary for marker in ("SAFETY", "PROHIBITED", "BLOCKLIST", "RECITATION", "SPII"))
+
+
+def build_output_file_name(joint, is_reevaluation, generated_at):
+    """Return a download file name such as PTカルテ_20261026_200512_膝関節_初回評価.txt."""
+    mode = "計画書更新" if is_reevaluation else "初回評価"
+    safe_joint = re.sub(r'[\\/:*?"<>|\s]+', "_", str(joint or "部位未選択"))
+    return f"PTカルテ_{generated_at:%Y%m%d_%H%M%S}_{safe_joint}_{mode}.txt"
+
+
+def build_output_download_text(display_text, *, joint, is_reevaluation, generated_at):
+    """Return the saved text with a short header; patient identifiers are not added."""
+    mode = "計画書更新" if is_reevaluation else "初回評価"
+    header = (
+        "【AI生成の下書き】医療者が内容を確認・修正してから使用してください。\n"
+        f"生成日時：{generated_at:%Y/%m/%d %H:%M:%S}（日本時間）\n"
+        f"評価部位：{joint}\n"
+        f"モード：{mode}\n"
+        "----------------------------------------\n"
+    )
+    return header + str(display_text or "")
+
+
+def build_auto_download_html(text, file_name):
+    """Return a tiny HTML/JS snippet that saves text as a UTF-8 (BOM) file."""
+    encoded_text = base64.b64encode(("\ufeff" + str(text)).encode("utf-8")).decode("ascii")
+    return f"""<script>
+(function () {{
+  try {{
+    const binary = atob({json.dumps(encoded_text)});
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], {{ type: "text/plain;charset=utf-8" }});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = {json.dumps(str(file_name))};
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () {{ URL.revokeObjectURL(url); }}, 10000);
+  }} catch (error) {{
+    console.error("auto download failed", error);
+  }}
+}})();
+</script>"""
