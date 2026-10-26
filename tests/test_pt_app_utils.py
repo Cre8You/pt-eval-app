@@ -1,3 +1,4 @@
+import datetime
 import unittest
 
 from pt_app_utils import LAXITY_MAX_SCORE
@@ -6,7 +7,10 @@ from pt_app_utils import NECK_MMT_ITEMS
 from pt_app_utils import PLAN_TRANSLATION_LANGUAGES
 from pt_app_utils import ROM_MEASUREMENT_AXES
 from pt_app_utils import ROM_REFERENCE_VALUES
+from pt_app_utils import build_auto_download_html
 from pt_app_utils import build_balance_assessment_lines
+from pt_app_utils import build_output_download_text
+from pt_app_utils import build_output_file_name
 from pt_app_utils import build_privacy_review_key
 from pt_app_utils import build_plan_translation_prompt
 from pt_app_utils import build_pt_free_text_instruction
@@ -1001,6 +1005,42 @@ class PrivacyReviewKeyTests(unittest.TestCase):
             {"TUGの歩行補助具・介助条件": "連絡先 090-1234-5678"}
         )
         self.assertEqual(findings, ["TUGの歩行補助具・介助条件（電話番号）"])
+
+
+class OutputDownloadTests(unittest.TestCase):
+    generated_at = datetime.datetime(2026, 10, 26, 20, 5, 12)
+
+    def test_file_name_contains_time_joint_and_mode(self):
+        self.assertEqual(
+            build_output_file_name("膝関節", False, self.generated_at),
+            "PTカルテ_20261026_200512_膝関節_初回評価.txt",
+        )
+        self.assertEqual(
+            build_output_file_name("頸部", True, self.generated_at),
+            "PTカルテ_20261026_200512_頸部_計画書更新.txt",
+        )
+
+    def test_file_name_removes_path_and_reserved_characters(self):
+        file_name = build_output_file_name('a/b\\c:d*e?"f<g>h|i j', False, self.generated_at)
+        for character in '/\\:*?"<>| ':
+            self.assertNotIn(character, file_name)
+
+    def test_download_text_has_header_and_unchanged_body(self):
+        body = "【電子カルテ用】\n疼痛：\n　安静時0"
+        text = build_output_download_text(
+            body, joint="膝関節", is_reevaluation=False, generated_at=self.generated_at
+        )
+        self.assertTrue(text.startswith("【AI生成の下書き】"))
+        self.assertIn("生成日時：2026/10/26 20:05:12（日本時間）", text)
+        self.assertIn("評価部位：膝関節", text)
+        self.assertIn("モード：初回評価", text)
+        self.assertTrue(text.endswith(body))
+
+    def test_auto_download_html_embeds_text_safely(self):
+        html = build_auto_download_html("</script><b>本文</b>", "PTカルテ.txt")
+        self.assertEqual(html.count("</script>"), 1)
+        self.assertIn("link.download", html)
+        self.assertIn("text/plain;charset=utf-8", html)
 
 
 if __name__ == "__main__":
