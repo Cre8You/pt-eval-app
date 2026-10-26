@@ -35,5 +35,8 @@ jobs:
       - name: Compile PT app utilities
         run: python -m py_compile pt_app_utils.py
 
+      - name: Compile home exercise PDF app
+        run: python -m py_compile home_exercise_pdf_app.py
+
       - name: Run unit tests
         run: python -m unittest discover

@@ -6,6 +6,7 @@ from pt_app_utils import NECK_MMT_ITEMS
 from pt_app_utils import PLAN_TRANSLATION_LANGUAGES
 from pt_app_utils import ROM_REFERENCE_VALUES
 from pt_app_utils import build_balance_assessment_lines
+from pt_app_utils import build_privacy_review_key
 from pt_app_utils import build_plan_translation_prompt
 from pt_app_utils import build_pt_free_text_instruction
 from pt_app_utils import calculate_laxity_score
@@ -27,6 +28,7 @@ from pt_app_utils import format_mmt_display_name
 from pt_app_utils import format_rom_display_name
 from pt_app_utils import is_plan_translation_usable
 from pt_app_utils import normalize_pt_free_text
+from pt_app_utils import should_include_rom_value
 from pt_app_utils import validate_ai_output
 from pt_app_utils import validate_physical_therapy_evaluation
 
@@ -902,6 +904,61 @@ class GeminiErrorClassificationTests(unittest.TestCase):
             "warning",
             "通信",
         )
+
+
+class RomPromptSelectionTests(unittest.TestCase):
+    def test_unmeasured_value_is_not_included(self):
+        self.assertFalse(should_include_rom_value(None, 125, has_pain=True))
+
+    def test_value_far_from_reference_is_included(self):
+        self.assertTrue(should_include_rom_value(120, 125))
+        self.assertTrue(should_include_rom_value(130, 125))
+
+    def test_value_near_reference_without_findings_is_omitted(self):
+        self.assertFalse(should_include_rom_value(121, 125))
+        self.assertFalse(should_include_rom_value(125, 125, contralateral_value=122))
+
+    def test_painful_value_near_reference_is_included(self):
+        self.assertTrue(should_include_rom_value(125, 125, has_pain=True))
+
+    def test_end_feel_value_near_reference_is_included(self):
+        self.assertTrue(should_include_rom_value(125, 125, has_end_feel=True))
+
+    def test_side_difference_includes_both_sides(self):
+        self.assertTrue(should_include_rom_value(125, 125, contralateral_value=120))
+        self.assertTrue(should_include_rom_value(120, 125, contralateral_value=125))
+
+    def test_zero_reference_and_zero_value_are_handled(self):
+        self.assertFalse(should_include_rom_value(0, 0))
+        self.assertTrue(should_include_rom_value(-10, 0))
+        self.assertTrue(should_include_rom_value(0, 0, contralateral_value=-5))
+
+    def test_items_without_reference_or_numeric_value_are_included(self):
+        self.assertTrue(should_include_rom_value(70, None))
+        self.assertTrue(should_include_rom_value("L1-5", None))
+
+    def test_unmeasured_contralateral_side_is_ignored(self):
+        self.assertFalse(should_include_rom_value(123, 125, contralateral_value=None))
+
+
+class PrivacyReviewKeyTests(unittest.TestCase):
+    def test_key_is_stable_for_same_text(self):
+        fields = {"PT自由記載": "可動域 0-90-120", "病名": "変形性膝関節症"}
+        self.assertEqual(build_privacy_review_key(fields), build_privacy_review_key(dict(fields)))
+
+    def test_key_changes_when_any_text_changes(self):
+        base = {"PT自由記載": "可動域 0-90-120", "病名": "変形性膝関節症"}
+        changed = {"PT自由記載": "可動域 0-90-120 090-1234-5678", "病名": "変形性膝関節症"}
+        self.assertNotEqual(build_privacy_review_key(base), build_privacy_review_key(changed))
+
+    def test_key_handles_none_values(self):
+        self.assertTrue(build_privacy_review_key({"PT自由記載": None}))
+
+    def test_tug_condition_field_is_scanned_by_detector(self):
+        findings = detect_potential_personal_information(
+            {"TUGの歩行補助具・介助条件": "連絡先 090-1234-5678"}
+        )
+        self.assertEqual(findings, ["TUGの歩行補助具・介助条件（電話番号）"])
 
 
 if __name__ == "__main__":
